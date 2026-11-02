@@ -89,7 +89,8 @@ PASS  zombie.glb «Walk»: 22 дорожек, битых 0, длина 1.20 с
 PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.20 с
 
 === главная сцена
-остров: плитка земли (8 м) на 1 поверхностях, вершинные цвета для растительности включены
+остров: материалы (60 поверхностей), вершинные цвета включены
+заплатка земли: 191x191 вершин, шаг 1.00 м
 PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
   бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
 PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
@@ -97,6 +98,11 @@ PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
 PASS  игроков: 1
 PASS  зомби: 3
 PASS  остров на сцене: узлов-мешей 60
+PASS  остров: земля на родном атласе 4096px
+PASS  заплатка земли над дырами: треугольников 72200
+PASS  заплатка земли использует атлас острова
+PASS  карта высот загружена в float32 (высота в метрах)
+PASS  высота арены из карты (1405.00) совпадает с arena.json (1405.00)
 PASS  игрок: скелет и AnimationPlayer
 PASS  игрок играет клип «MxIdle»
 PASS  меч прицеплен к кисти
@@ -114,8 +120,10 @@ PASS  зомби: играет «MxCrawl»
 PASS  куски конечностей на земле: 3
 PASS  куски не наследуют красную вспышку удара
 PASS  зомби: тело держит удар (осталось 966 HP)
+ERROR: Parameter "m" is null.
+   at: mesh_get_surface_count (servers/rendering/dummy/storage/mesh_storage.h:120)
 
-=== итог: 77 проверок, 0 провалов
+=== итог: 82 проверок, 0 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
@@ -128,7 +136,6 @@ exit=0
 ![](ci/shots/04_crawl.png)
 ![](ci/shots/05_debris.png)
 ```
-ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
 ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
 ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
 ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
@@ -141,14 +148,15 @@ ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
 WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
 
-остров: плитка земли (8 м) на 1 поверхностях, вершинные цвета для растительности включены
+остров: материалы (60 поверхностей), вершинные цвета включены
+заплатка земли: 191x191 вершин, шаг 1.00 м
 внешние клипы: +7 из res://models/medic_clips.glb
 внешние клипы: +7 из res://models/zombie_clips.glb
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
 shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
 shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
-зомби-ползун: body y=1405.25 model y=0.00 lowest bone=Hand_R y=1405.62 lowest mesh y=1404.59 on_floor=true
-игрок y=1404.13 pos=(1309.365, 1404.127, -69.25084), камера=(1311.564, 1407.202, -77.82819)
+зомби-ползун: body y=1405.21 model y=0.00 lowest bone=Hand_R y=1405.58 lowest mesh y=1404.54 on_floor=true
+игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.556, 1407.285, -77.76264)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
 готово
