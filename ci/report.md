@@ -2,11 +2,17 @@
 
 Godot: `4.3.stable.official.77dcf97d8`
 
+## Разбор скриптов (`--check-only`)
+```
+ok   res://scripts/hud.gd
+ok   res://scripts/main.gd
+ok   res://scripts/player.gd
+ok   res://scripts/zombie.gd
+ok   res://tests/check.gd
+```
 ## Импорт проекта
 ```
 WARNING: Ignoring face with non-finite normal in LOD generation.
-SCRIPT ERROR: Parse Error: The variable type is being inferred from a Variant value, so it will be typed as Variant. (Warning treated as error.)
-ERROR: Failed to load script "res://scripts/hud.gd" with error "Parse error".
 ```
 ## tests/check.gd
 ```
@@ -82,25 +88,28 @@ PASS  zombie.glb «Walk»: 22 дорожек, битых 0, длина 1.20 с
 PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.20 с
 
 === главная сцена
-SCRIPT ERROR: Parse Error: The variable type is being inferred from a Variant value, so it will be typed as Variant. (Warning treated as error.)
-          at: GDScript::reload (res://scripts/hud.gd:54)
-ERROR: Failed to load script "res://scripts/hud.gd" with error "Parse error".
-   at: load (modules/gdscript/gdscript.cpp:2936)
-SCRIPT ERROR: Invalid call. Nonexistent function 'setup' in base 'CanvasLayer'.
-          at: _ready (res://scripts/main.gd:31)
 PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
   бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
 PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
   бёдра в мировых координатах: (-0.00594, 0.446332, -0.005806)
 PASS  игроков: 1
 PASS  зомби: 3
-FAIL  остров на сцене
+PASS  остров на сцене: узлов-мешей 60
 PASS  игрок: скелет и AnimationPlayer
 PASS  игрок играет клип «MxIdle»
 PASS  меч прицеплен к кисти
 PASS  зомби: тело 1000 HP (1000)
 PASS  зомби: рука 3 HP
-SCRIPT ERROR: Invalid call. Nonexistent function 'get_bone_length' in base 'Skeleton3D'.
-          at: _run (res://tests/check.gd:161)
-exit=124
+PASS  зомби: arm_l отрублена после 3 ударов
+PASS  зомби: leg_l отрублена после 3 ударов
+PASS  зомби: leg_r отрублена после 3 ударов
+PASS  зомби: без двух ног состояние «crawl»
+PASS  зомби: играет «MxCrawl»
+PASS  куски конечностей на земле: 3
+PASS  зомби: тело держит удар (осталось 966 HP)
+
+=== итог: 72 проверок, 0 провалов
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+exit=0
 ```
