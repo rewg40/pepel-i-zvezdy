@@ -1,6 +1,6 @@
 """Island: decimate the shipped terrain/vegetation and bake a heightmap.
 
-writes  game/models/island.glb, game/models/heightmap.png, game/models/heightmap.json
+writes  game/models/island.glb, heightmap.png, heightmap.f32, heightmap.json
 """
 import io
 import json
@@ -170,6 +170,9 @@ def main(src, outdir='/home/user/pepel-i-zvezdy/game/models'):
     print('heightmap', H.shape, 'y', round(lo, 1), round(hi, 1))
     hm = ((H - lo) / max(hi - lo, 1e-6) * 65535).astype(np.uint16)
     Image.fromarray(hm).save(f'{outdir}/heightmap.png')
+    # float32-копия: 8/16-битная PNG после импорта в Godot теряет точность,
+    # а земляной заплатке в игре нужны высоты с сантиметровой точностью
+    H.astype('<f4').tofile(f'{outdir}/heightmap.f32')
     json.dump({'x0': x0, 'x1': x1, 'z0': z0, 'z1': z1, 'res': res,
                'y_min': lo, 'y_max': hi}, open(f'{outdir}/heightmap.json', 'w'), indent=1)
     # a flat, dry place to spawn the fight
@@ -200,6 +203,7 @@ def main(src, outdir='/home/user/pepel-i-zvezdy/game/models'):
     lo2, hi2 = float(H2.min()), float(H2.max())
     hm2 = ((H2 - lo2) / max(hi2 - lo2, 1e-6) * 65535).astype(np.uint16)
     Image.fromarray(hm2).save(f'{outdir}/heightmap.png')
+    H2.astype('<f4').tofile(f'{outdir}/heightmap.f32')
     json.dump({'x0': wx - a, 'x1': wx + a, 'z0': wz - a, 'z1': wz + a,
                'res': res2, 'y_min': lo2, 'y_max': hi2, 'cell': 1.0},
               open(f'{outdir}/heightmap.json', 'w'), indent=1)

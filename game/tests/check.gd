@@ -142,6 +142,37 @@ func _run() -> void:
 	ok(island != null and island_meshes > 0,
 		"остров на сцене: узлов-мешей %d" % island_meshes)
 
+	# земля должна рисоваться родным атласом острова, а не синтетической плиткой
+	var terrain_tex: Texture2D = null
+	if island != null:
+		for m in island.find_children("*", "MeshInstance3D", true, false):
+			var mat: Material = (m as MeshInstance3D).get_active_material(0)
+			if mat is StandardMaterial3D and (mat as StandardMaterial3D).albedo_texture != null:
+				terrain_tex = (mat as StandardMaterial3D).albedo_texture
+				break
+	ok(terrain_tex != null and terrain_tex.get_width() >= 2048,
+		"остров: земля на родном атласе %s" % [
+			"-" if terrain_tex == null else "%dpx" % terrain_tex.get_width()])
+
+	# в меше острова у арены есть дыры — их закрывает заплатка по heightmap
+	var patch := scene.get_node_or_null("ArenaGroundPatch") as MeshInstance3D
+	var patch_tris := 0
+	if patch != null and patch.mesh != null:
+		patch_tris = patch.mesh.get_faces().size() / 3
+	ok(patch != null and patch_tris > 10000,
+		"заплатка земли над дырами: треугольников %d" % patch_tris)
+	if patch != null:
+		var pmat: Material = patch.material_override
+		ok(pmat is StandardMaterial3D and (pmat as StandardMaterial3D).albedo_texture != null,
+			"заплатка земли использует атлас острова")
+		var hm: Dictionary = scene.get("_hm")
+		ok(not hm.is_empty() and float(hm.get("data", PackedFloat32Array())[0]) > 1000.0,
+			"карта высот загружена в float32 (высота в метрах)")
+		var arena: Vector3 = scene.get("arena_position")
+		ok(absf(scene.call("height_at", arena.x, arena.z) - arena.y) < 0.4,
+			"высота арены из карты (%.2f) совпадает с arena.json (%.2f)"
+				% [scene.call("height_at", arena.x, arena.z), arena.y])
+
 	if players.size() > 0:
 		var pl = players[0]
 		ok(pl.skeleton != null and pl.anim != null, "игрок: скелет и AnimationPlayer")

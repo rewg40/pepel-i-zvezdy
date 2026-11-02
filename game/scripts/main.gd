@@ -88,24 +88,14 @@ func _spawn_island() -> void:
 	island.name = "Island"
 	add_child(island)
 	_fix_island_materials(island)
+	_build_arena_ground(island)
 	_make_heightmap_collision()
 
 
-## Остров собран из одного меша на 20×20 км с UV 0..1 на всю карту: у арены
-## один тексель текстуры покрывает ~5 м, поэтому земля выглядит ровным пятном.
-## Подменяем базовую текстуру на бесшовную плитку земли (tools/make_ground_tile.py)
-## и тайлим её примерно раз в 8 м.
-const GROUND_TILE := "res://models/ground_tile.png"
-const GROUND_TILE_METERS := 8.0
-const ISLAND_SPAN_METERS := 20000.0   # UV острова 0..1 на всю карту
-
-
+## Материалы острова. Своей текстуры у земли нет — используем родной атлас
+## island.glb (4096², UV 0..1 на всю карту, ~5 м на тексель). Растительность и
+## островки раскрашены вершинными цветами — их надо включить, иначе они белые.
 func _fix_island_materials(island: Node) -> void:
-	if not ResourceLoader.exists(GROUND_TILE):
-		push_warning("нет " + GROUND_TILE + " — земля останется без детализации")
-		return
-	var tile: Texture2D = load(GROUND_TILE)
-	var repeat := ISLAND_SPAN_METERS / GROUND_TILE_METERS
 	var n := 0
 	for mi in island.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := mi as MeshInstance3D
@@ -118,23 +108,102 @@ func _fix_island_materials(island: Node) -> void:
 			var dup: StandardMaterial3D = mat.duplicate()
 			dup.roughness = 1.0
 			dup.metallic = 0.0
-			dup.metallic_specular = 0.15
-			if mat.albedo_texture != null:
-				# земля: своя бесшовная плитка вместо атласа на всю карту
-				dup.albedo_texture = tile
-				dup.albedo_color = Color(1, 1, 1)
-				dup.uv1_scale = Vector3(repeat, repeat, 1.0)
-				dup.texture_repeat = true
-				dup.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-				n += 1
-			else:
-				# растительность и островки раскрашены вершинными цветами;
-				# без этого они выходили белыми плоскими треугольниками
-				dup.vertex_color_use_as_albedo = true
-				dup.vertex_color_is_srgb = true
+			dup.metallic_specular = 0.12
+			dup.vertex_color_use_as_albedo = true
+			dup.vertex_color_is_srgb = true
 			mesh_instance.set_surface_override_material(surf, dup)
-	print("остров: плитка земли (", GROUND_TILE_METERS, " м) на ", n, " поверхностях, ",
-		"вершинные цвета для растительности включены")
+			n += 1
+	print("остров: материалы (", n, " поверхностей), вершинные цвета включены")
+
+
+## UV земли аффинно связан с миром: u = x * UV_U_PER_M + UV_U_OFFSET,
+## v = z * UV_V_PER_M + UV_V_OFFSET (коэффициенты сняты с island.glb).
+const UV_U_PER_M := 5.0e-5
+const UV_U_OFFSET := 0.499974
+const UV_V_PER_M := 7.0e-5
+const UV_V_OFFSET := 0.505151
+
+
+## В меше острова есть дыры (у арены — дыры в десятки метров): сквозь них видно
+## пустоту/океан. Закрываем их заплаткой земли по heightmap.png с той же
+## UV-развёрткой, что у острова, поэтому швов и разницы в цвете не видно.
+const PATCH_RADIUS := 95.0        # м от центра арены
+const PATCH_SINK := 0.12          # м ниже острова: где меш целый, его и видно
+const PATCH_MAX_STEP := 1.0       # м между вершинами
+
+
+func _build_arena_ground(island: Node) -> void:
+	if _hm.is_empty():
+		_load_heightmap()
+	if _hm.is_empty():
+		push_warning("нет heightmap.png — заплатка земли не построена")
+		return
+	var mat: Material = null
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		for surf in m.mesh.get_surface_count() if m.mesh else 0:
+			var candidate := m.get_active_material(surf)
+			if candidate is StandardMaterial3D and (candidate as StandardMaterial3D).albedo_texture != null:
+				mat = candidate
+				break
+		if mat != null:
+			break
+	var cx := arena_position.x
+	var cz := arena_position.z
+	var half := int(ceil(PATCH_RADIUS / PATCH_MAX_STEP))
+	var side := half * 2 + 1
+	var step: float = (2.0 * PATCH_RADIUS) / float(side - 1)
+
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	verts.resize(side * side)
+	normals.resize(side * side)
+	uvs.resize(side * side)
+	for iz in side:
+		for ix in side:
+			var x := cx - PATCH_RADIUS + float(ix) * step
+			var z := cz - PATCH_RADIUS + float(iz) * step
+			var idx := iz * side + ix
+			verts[idx] = Vector3(x, height_at(x, z) - PATCH_SINK, z)
+			var hl := height_at(x - step, z)
+			var hr := height_at(x + step, z)
+			var hu := height_at(x, z - step)
+			var hd := height_at(x, z + step)
+			normals[idx] = Vector3(hl - hr, 2.0 * step, hu - hd).normalized()
+			uvs[idx] = Vector2(x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
+
+	var indices := PackedInt32Array()
+	indices.resize((side - 1) * (side - 1) * 6)
+	var k := 0
+	for iz in side - 1:
+		for ix in side - 1:
+			var a := iz * side + ix
+			var b := a + 1
+			var c := a + side
+			var d := c + 1
+			indices[k] = a
+			indices[k + 1] = c
+			indices[k + 2] = b
+			indices[k + 3] = b
+			indices[k + 4] = c
+			indices[k + 5] = d
+			k += 6
+
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var patch := MeshInstance3D.new()
+	patch.name = "ArenaGroundPatch"
+	patch.mesh = mesh
+	patch.material_override = mat
+	add_child(patch)
+	print("заплатка земли: ", side, "x", side, " вершин, шаг ", "%.2f" % step, " м")
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).
@@ -220,9 +289,31 @@ func _load_heightmap() -> void:
 	if f == null:
 		return
 	var meta: Dictionary = JSON.parse_string(f.get_as_text())
+	var res: int = meta.get("res", 0)
+	var data := PackedFloat32Array()
+	# heightmap.f32 (float32, абсолютные высоты) — точный вариант:
+	# PNG после импорта в движок отдаёт 8 бит, это 0.28 м ступенек по высоте
+	var raw := FileAccess.get_file_as_bytes("res://models/heightmap.f32")
+	if raw.size() == res * res * 4 and res > 0:
+		data.resize(res * res)
+		for i in res * res:
+			data[i] = raw.decode_float(i * 4)
+	else:
+		data = _heightmap_from_png(meta)
+		if data.is_empty():
+			return
+	_hm = {
+		"res": res, "data": data,
+		"x0": meta.get("x0", 0.0), "z0": meta.get("z0", 0.0),
+		"cell": meta.get("cell", 1.0),
+	}
+
+
+## Запасной путь: 8-битная карта высот из PNG (если нет heightmap.f32).
+func _heightmap_from_png(meta: Dictionary) -> PackedFloat32Array:
 	var tex := load("res://models/heightmap.png") as Texture2D
 	if tex == null:
-		return
+		return PackedFloat32Array()
 	var img := tex.get_image()
 	img.convert(Image.FORMAT_R8)
 	var res: int = meta.get("res", img.get_width())
@@ -233,13 +324,7 @@ func _load_heightmap() -> void:
 	for z in res:
 		for x in res:
 			data[z * res + x] = y_min + img.get_pixel(x, z).r * (y_max - y_min)
-	_hm = {
-		"res": res, "data": data,
-		"x0": meta.get("x0", 0.0), "z0": meta.get("z0", 0.0),
-		"cell": meta.get("cell", 1.0),
-	}
-
-
+	return data
 func alive_zombies() -> int:
 	var n := 0
 	for z in zombies:
