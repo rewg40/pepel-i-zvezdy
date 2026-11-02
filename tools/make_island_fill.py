@@ -117,6 +117,31 @@ def fill_nearest(h, valid):
     return h, dist
 
 
+def smooth_holes(h, valid, iters=60):
+    """Сглаживание восстановленных высот внутри дыр (границы не трогаем):
+    без него в больших дырах остаются ступеньки и «простыни»."""
+    h = h.copy()
+    for _ in range(iters):
+        nb = (np.roll(h, 1, 0) + np.roll(h, -1, 0)
+              + np.roll(h, 1, 1) + np.roll(h, -1, 1)) / 4.0
+        h = np.where(valid, h, nb)
+    return h
+
+
+def limit_slope(h, valid, cell, max_step=1.5, iters=80):
+    """Ограничиваем уклон восстановленных высот: клетка не может отличаться от
+    соседей больше чем на max_step клеток. Так вместо вертикальных простыней
+    получается пологий склон, и ни одну клетку не нужно выбрасывать."""
+    h = h.copy()
+    lim = max_step * cell
+    for _ in range(iters):
+        nb = [np.roll(h, 1, 0), np.roll(h, -1, 0), np.roll(h, 1, 1), np.roll(h, -1, 1)]
+        mn = np.minimum.reduce(nb)
+        mx = np.maximum.reduce(nb)
+        h = np.where(valid, h, np.clip(h, mn - lim, mx + lim))
+    return h
+
+
 def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
                max_dist=6.0, max_step=3.0):
     """Квады по клеткам-дырам.
@@ -204,9 +229,14 @@ def main() -> int:
     cov_o, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
     valid = cov_o
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
+    fill_dist = np.where(cov_o, 0.0, fill_dist)
+    h_filled = smooth_holes(h_filled, cov_o)
+    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
-    holes_o = (~valid) & land & dilate(valid, 2)
+    # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
+    # больших дыр отбрасывалась и на кадрах оставались чёрные «стрелки»)
+    holes_o = (~valid) & land
     # внутренний прямоугольник отдаём 1-м заплатке
     xs = ox0 + (np.arange(onx) + 0.5) * OUTER_CELL
     zs = oz0 + (np.arange(onz) + 0.5) * OUTER_CELL
@@ -219,11 +249,11 @@ def main() -> int:
     g = glbw.GLB("IslandFill")
     prims = []
     inner = build_mesh(inner_cells, heights, hcell, res, res, hx0, hz0,
-                       "fill_inner", max_dist=None, max_step=4.0)
+                       "fill_inner", max_dist=None, max_step=1e6)  # высоты из heightmap — не отбрасываем
     if inner:
         prims.append(inner)
     outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
-                       "fill_outer", dist=fill_dist, max_dist=6.0, max_step=3.0)
+                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=6.0)
     if outer:
         prims.append(outer)
     if not prims:
