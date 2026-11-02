@@ -121,9 +121,9 @@ exit=0
 ```
 ----------------
 Done recording movie at path: /tmp/movie/f.png
-240 frames at 30 FPS (movie length: 00:00:08), recorded in 00:14:47 (0% of real-time speed).
-CPU time: 845.73 seconds (average: 3523.89 ms/frame)
-GPU time: 845.89 seconds (average: 3524.53 ms/frame)
+60 frames at 30 FPS (movie length: 00:00:02), recorded in 00:03:45 (0% of real-time speed).
+CPU time: 194.40 seconds (average: 3240.05 ms/frame)
+GPU time: 194.31 seconds (average: 3238.47 ms/frame)
 ----------------
 exit=0
 f.wav
