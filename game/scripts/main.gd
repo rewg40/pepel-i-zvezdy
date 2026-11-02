@@ -92,26 +92,49 @@ func _spawn_island() -> void:
 
 
 ## Остров собран из одного меша на 20×20 км с UV 0..1 на всю карту: у арены
-## остаётся 8 вершин на 120 м, и текстура растягивается в ровное пятно.
-## Поэтому включаем тайлинг материала — детализация возвращается.
+## один тексель текстуры покрывает ~5 м, поэтому земля выглядит ровным пятном.
+## Подменяем базовую текстуру на бесшовную плитку земли (tools/make_ground_tile.py)
+## и тайлим её примерно раз в 8 м.
+const GROUND_TILE := "res://models/ground_tile.png"
+const GROUND_TILE_METERS := 8.0
+const ISLAND_SPAN_METERS := 20000.0   # UV острова 0..1 на всю карту
+
+
 func _fix_island_materials(island: Node) -> void:
+	if not ResourceLoader.exists(GROUND_TILE):
+		push_warning("нет " + GROUND_TILE + " — земля останется без детализации")
+		return
+	var tile: Texture2D = load(GROUND_TILE)
+	var repeat := ISLAND_SPAN_METERS / GROUND_TILE_METERS
 	var n := 0
 	for mi in island.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := mi as MeshInstance3D
-		var count := mesh_instance.mesh.get_surface_count() if mesh_instance.mesh else 0
-		for surf in count:
+		if mesh_instance.mesh == null:
+			continue
+		for surf in mesh_instance.mesh.get_surface_count():
 			var mat := mesh_instance.get_active_material(surf)
 			if not (mat is StandardMaterial3D):
 				continue
-			if mat.albedo_texture == null:
-				continue          # вода и морское дно — однотонные
 			var dup: StandardMaterial3D = mat.duplicate()
-			dup.uv1_scale = Vector3(120.0, 120.0, 1.0)
-			dup.texture_repeat = true
+			dup.roughness = 1.0
+			dup.metallic = 0.0
+			dup.metallic_specular = 0.15
+			if mat.albedo_texture != null:
+				# земля: своя бесшовная плитка вместо атласа на всю карту
+				dup.albedo_texture = tile
+				dup.albedo_color = Color(1, 1, 1)
+				dup.uv1_scale = Vector3(repeat, repeat, 1.0)
+				dup.texture_repeat = true
+				dup.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+				n += 1
+			else:
+				# растительность и островки раскрашены вершинными цветами;
+				# без этого они выходили белыми плоскими треугольниками
+				dup.vertex_color_use_as_albedo = true
+				dup.vertex_color_is_srgb = true
 			mesh_instance.set_surface_override_material(surf, dup)
-			n += 1
-	if n > 0:
-		print("остров: тайлинг текстуры включён для ", n, " поверхностей")
+	print("остров: плитка земли (", GROUND_TILE_METERS, " м) на ", n, " поверхностях, ",
+		"вершинные цвета для растительности включены")
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).
