@@ -76,7 +76,19 @@ jobs:
           done
           ls -l ci || true
 
-      - name: Build report
+      - name: Screenshots
+        continue-on-error: true
+        run: |
+          set +e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri >/dev/null 2>&1
+          timeout 900 xvfb-run -a godot --path game --resolution 800x450 \
+            --rendering-driver opengl3 --script res://tests/shots.gd > /tmp/shots.log 2>&1
+          echo "exit=$?" >> /tmp/shots.log
+          tail -20 /tmp/shots.log
+          ls -l game/ci/shots 2>/dev/null || ls -l ci/shots 2>/dev/null || true
+
+      - name: Render frames (software)
         if: always()
         run: |
           mkdir -p ci
@@ -99,9 +111,10 @@ jobs:
             echo '```'
             echo '## Кадры из движка (software OpenGL)'
             echo
-            if ls ci/frame_*.png >/dev/null 2>&1; then
-              for f in ci/frame_*.png; do echo "![]($f)"; done
+            if ls ci/shots/*.png >/dev/null 2>&1; then
+              for f in ci/shots/*.png; do echo "![]($f)"; done
             fi
+            for f in ci/frame_*.png; do [ -f "$f" ] && echo "![]($f)"; done
             echo '```'
             tail -12 /tmp/render.log 2>/dev/null || echo "(рендера не было)"
             echo '```'
