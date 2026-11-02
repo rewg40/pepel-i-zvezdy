@@ -60,6 +60,17 @@ func _debug_ground(node: Node, label: String) -> void:
 		lowest_name, lowest, aabb_y, on_floor])
 
 
+## Оставляем видимыми только меши с указанными материалами ([] — все).
+func _only_materials(island: Node, allowed: Array) -> void:
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var own := m.mesh.surface_get_material(0)
+		var nm := "-" if own == null else String(own.resource_name)
+		m.visible = allowed.is_empty() or allowed.has(nm)
+
+
 func _place(pos: Vector3, look_at_point: Vector3) -> void:
 	cam.look_at_from_position(pos, look_at_point, Vector3.UP)
 	# у самой камеры свой Environment не нужен, но мелкий клип убирает джиттер
@@ -116,6 +127,26 @@ func _run() -> void:
 	# 5. тот же зомби чуть сверху: видно куски на земле
 	await _place(zp + Vector3(3.0, 3.2, 3.4), zp + Vector3(0, 0.2, 0))
 	await _shot("05_debris")
+
+	# 6-7. диагностика: что именно занимает дальний план
+	var island := scene.get_node_or_null("Island")
+	if island != null:
+		var by_mat := {}
+		for mi in island.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			if m.mesh == null:
+				continue
+			var own := m.mesh.surface_get_material(0)
+			var nm := "-" if own == null else String(own.resource_name)
+			by_mat[nm] = int(by_mat.get(nm, 0)) + 1
+		print("материалы острова: ", by_mat)
+		var far := pp + Vector3(0, 30, 90)
+		await _place(far, pp + Vector3(0, 40, -600))
+		_only_materials(island, ["Island"])
+		await _shot("06_terrain_only")
+		_only_materials(island, ["Ocean", "Seafloor", "Islet"])
+		await _shot("07_water_only")
+		_only_materials(island, [])
 
 	print("готово")
 	quit(0)
