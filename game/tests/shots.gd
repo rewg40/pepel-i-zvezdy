@@ -80,6 +80,9 @@ func _run() -> void:
 			z.receive_hit(xf.origin + xf.basis.y * 0.1, Vector3.FORWARD, 1.0, 34.0)
 			await _frames(1)
 	await _frames(20)
+	# зомби ползёт и успевает уйти из кадра — фиксируем его на месте
+	z.set_physics_process(false)
+	zp = z.global_position
 	await _place(zp + Vector3(2.4, 1.3, 2.8), zp + Vector3(0, 0.4, 0))
 	await _shot("04_crawl")
 

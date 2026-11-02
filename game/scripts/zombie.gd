@@ -328,6 +328,9 @@ func _spawn_debris(part: String) -> void:
 	var mesh := piece.duplicate()
 	mesh.position = Vector3.ZERO
 	mesh.rotation = Vector3.ZERO
+	# кусок наследует вспышку удара (красную эмиссию) — иначе дебрис светится
+	for surf in mesh.mesh.get_surface_count():
+		mesh.set_surface_override_material(surf, null)
 	body.add_child(mesh)
 	var aabb := _aabb_of(mesh)
 	var shape := BoxShape3D.new()

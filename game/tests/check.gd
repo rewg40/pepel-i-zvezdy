@@ -183,9 +183,17 @@ func _run() -> void:
 		ok(String(z.anim.current_animation).ends_with("Crawl"),
 			"зомби: играет «%s»" % z.anim.current_animation)
 		var debris := 0
+		var glowing := 0
 		for c in scene.find_children("Debris_*", "RigidBody3D", true, false):
 			debris += 1
+			for mi in c.find_children("*", "MeshInstance3D", true, false):
+				var m := mi as MeshInstance3D
+				for surf in m.mesh.get_surface_count():
+					var mat := m.get_surface_override_material(surf)
+					if mat is StandardMaterial3D and (mat as StandardMaterial3D).emission_enabled:
+						glowing += 1
 		ok(debris >= 3, "куски конечностей на земле: %d" % debris)
+		ok(glowing == 0, "куски не наследуют красную вспышку удара")
 		# удар по телу: 1000 HP не должен улететь от одного удара
 		z.receive_hit(z.global_position + Vector3(0, 0.9, 0), Vector3.FORWARD, 1.0, 34.0)
 		await _frames(1)

@@ -45,8 +45,8 @@ func _setup_environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.55
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.72, 0.70, 0.66)
-	env.fog_density = 0.0016
+	env.fog_light_color = Color(0.66, 0.66, 0.62)
+	env.fog_density = 0.0009
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 0.85
 
