@@ -38,8 +38,11 @@ func _setup_environment() -> void:
 	var sky_mat := ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.26, 0.37, 0.55)
 	sky_mat.sky_horizon_color = Color(0.60, 0.63, 0.68)
-	sky_mat.ground_bottom_color = Color(0.20, 0.20, 0.19)
-	sky_mat.ground_horizon_color = Color(0.42, 0.42, 0.43)
+	# нижняя полусфера неба — песочная: сквозь редкие дыры в меше острова
+	# (децимация) видно именно её, и с тёмно-серым цветом они читались как
+	# чёрные многоугольники посреди песка
+	sky_mat.ground_bottom_color = Color(0.55, 0.47, 0.34)
+	sky_mat.ground_horizon_color = Color(0.72, 0.66, 0.55)
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
