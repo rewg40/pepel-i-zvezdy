@@ -114,6 +114,11 @@ func _fix_island_materials(island: Node) -> void:
 		var mesh_instance := mi as MeshInstance3D
 		if mesh_instance.mesh == null:
 			continue
+		# в меше острова есть наложенные слои поверхности на 10–40 м выше земли:
+		# они отбрасывают на песок чёрные многоугольные тени. Тени острову не
+		# нужны (свет ровный), а растительность и персонажи теньят как обычно.
+		if String(mesh_instance.name).begins_with("node_"):
+			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		for surf in mesh_instance.mesh.get_surface_count():
 			var mat := mesh_instance.get_active_material(surf)
 			if not (mat is StandardMaterial3D):
