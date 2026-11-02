@@ -158,7 +158,7 @@ func _physics_process(delta: float) -> void:
 		model.rotation.y = lerp_angle(model.rotation.y, _yaw + PI, 12.0 * delta)
 	if arm:
 		arm.rotation.x = _pitch
-		arm.rotation.y = 0.0
+		arm.rotation.y = _yaw
 
 	# --- анимация
 	if _attacking:
