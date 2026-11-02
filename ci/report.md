@@ -90,7 +90,7 @@ PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.2
 
 === главная сцена
 остров: материалы (60 поверхностей), вершинные цвета включены
-заплатка земли: 191x191 вершин, шаг 1.00 м
+заплатка земли: 7552 клеток по 1 м (закрывает дыры меша)
 PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
   бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
 PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
@@ -99,7 +99,8 @@ PASS  игроков: 1
 PASS  зомби: 3
 PASS  остров на сцене: узлов-мешей 60
 PASS  остров: земля на родном атласе 4096px
-PASS  заплатка земли над дырами: треугольников 72200
+PASS  заплатка земли над дырами: треугольников 15104
+PASS  заплатка только по дырам, а не под всей ареной
 PASS  заплатка земли использует атлас острова
 PASS  карта высот загружена в float32 (высота в метрах)
 PASS  высота арены из карты (1405.00) совпадает с arena.json (1405.00)
@@ -123,7 +124,7 @@ PASS  зомби: тело держит удар (осталось 966 HP)
 ERROR: Parameter "m" is null.
    at: mesh_get_surface_count (servers/rendering/dummy/storage/mesh_storage.h:120)
 
-=== итог: 82 проверок, 0 провалов
+=== итог: 83 проверок, 0 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
@@ -149,7 +150,7 @@ WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
 
 остров: материалы (60 поверхностей), вершинные цвета включены
-заплатка земли: 191x191 вершин, шаг 1.00 м
+заплатка земли: 7552 клеток по 1 м (закрывает дыры меша)
 внешние клипы: +7 из res://models/medic_clips.glb
 внешние клипы: +7 из res://models/zombie_clips.glb
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
