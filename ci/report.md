@@ -141,12 +141,10 @@ exit=0
 ![](ci/shots/05_debris.png)
 ![](ci/shots/06_terrain_only.png)
 ![](ci/shots/07_water_only.png)
-![](ci/shots/08_only_fill.png)
 ![](ci/shots/08_only_islet.png)
 ![](ci/shots/08_only_ocean.png)
 ![](ci/shots/08_only_seafloor.png)
 ![](ci/shots/08_only_vegetation.png)
-![](ci/shots/09_terrain_no_fill.png)
 ![](ci/shots/09_terrain_vegetation.png)
 ```
    at: init_output_device (drivers/alsa/audio_driver_alsa.cpp:90)
