@@ -123,9 +123,12 @@ def main() -> int:
     inb = (ix >= 0) & (iz >= 0) & (ix < res) & (iz < res)
     ref = np.zeros(len(T))
     ref[inb] = H[iz[inb], ix[inb]]
-    lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
-    print("нижний слой поверхности: скрыто %d треугольников из %d в зоне"
-          % (int(lower.sum()), int(inb.sum())))
+    # внутри площадки heightmap меш не рисуем вовсе: там наложенные слои,
+    # дыры и складки, а заплатка tools/make_island_fill.py строит по этой же
+    # карте ровную сетку 1 м (её края совпадают с мешем по высоте)
+    lower = inb
+    print("внутри площадки heightmap скрыто %d треугольников (сетка на их месте)"
+          % int(lower.sum()))
     F[lower] = F[lower][:, :1].repeat(3, axis=1)
 
     raw = F.astype(iw).tobytes()

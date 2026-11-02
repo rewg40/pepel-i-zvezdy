@@ -37,6 +37,7 @@ UV_U_PER_M, UV_U_OFFSET = 5.0e-5, 0.499974
 UV_V_PER_M, UV_V_OFFSET = 7.0e-5, 0.505151
 
 INNER_DILATE = 2        # клеток: заплатка заходит под соседние треугольники
+BLEND_METERS = 25.0     # плавный переход сетки в исходные высоты у края
 OUTER_CELL = 6.0        # м
 OUTER_RADIUS = 2000.0   # м от центра арены
 SINK = 0.15             # м ниже меша, чтобы не мерцать на стыках
@@ -271,16 +272,28 @@ def main() -> int:
     # скалы): высота по клеткам прыгает на 40+ м, и сетка строит из этого
     # вертикальные простыни. Поэтому берём карту высот и мягко её сглаживаем,
     # сохраняя общий рельеф: результат — холмистая земля без стен.
-    # Мягкое сглаживание: убирает перепады наложенных слоёв (до 50 м), из-за
-    # которых сетка строила вертикальные простыни
-    inner_h = heights.copy()
+    # Сетка закрывает ВСЮ площадку, а меш внутри неё скрыт (fix_terrain_normals
+    # отключает там треугольники). Высоты: в глубине — сглаженные (иначе
+    # наложенные слои меша дают стены в 40 м), к краю плавно переходят в
+    # исходные, поэтому на границе сетка совпадает с мешем и шва не видно.
+    smooth = heights.copy()
     for _ in range(30):
-        inner_h = sum(neighbours(inner_h)) * 0.25
-    inner_h = limit_slope(inner_h, np.zeros_like(cov), hcell, max_step=0.6)
-    # Сетку рисуем только там, где меша нет или он заметно ниже неё: иначе на
-    # границе «сетка vs меш» встаёт видимая стенка
-    real = cov & (np.abs(hmax - inner_h) < 1.5)
-    inner_cells = np.pad(~real, ((0, 1), (0, 1)), mode="edge")[:res - 1, :res - 1]
+        smooth = sum(neighbours(smooth)) * 0.25
+    smooth = limit_slope(smooth, np.zeros_like(cov), hcell, max_step=0.6)
+    edge = np.zeros_like(cov)
+    edge_cells = max(1, int(round(BLEND_METERS / hcell)))
+    edge[:, :edge_cells] = True
+    edge[:, -edge_cells:] = True
+    edge[:edge_cells, :] = True
+    edge[-edge_cells:, :] = True
+    blend = np.zeros_like(heights)
+    for _ in range(edge_cells):
+        edge = edge | (np.pad(edge, 1, mode="edge")[1:-1, 2:] & np.pad(edge, 1, mode="edge")[1:-1, :-2]) \
+            | (np.pad(edge, 1, mode="edge")[2:, 1:-1] & np.pad(edge, 1, mode="edge")[:-2, 1:-1])
+        blend += edge
+    w = np.clip(blend / max(edge_cells, 1), 0.0, 1.0)
+    inner_h = heights * (1.0 - w) + smooth * w
+    inner_cells = np.pad(np.ones_like(cov, bool), ((0, 1), (0, 1)), mode="edge")[:res - 1, :res - 1]
     inner_h = limit_slope(inner_h, cov, hcell, max_step=0.5)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
