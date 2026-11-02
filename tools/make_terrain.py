@@ -32,6 +32,8 @@ import numpy as np
 
 import glb_io
 import glbw
+from PIL import Image
+
 from make_island_fill import raster, shift
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,6 +43,7 @@ ARCHIVE = [os.path.join(ROOT, "остров", "2 остров улучшенны
 SRC_CACHE = "/tmp/island_src.glb"
 HM_JSON = os.path.join(ROOT, "game", "models", "heightmap.json")
 HM_F32 = os.path.join(ROOT, "game", "models", "heightmap.f32")
+HM_PNG = os.path.join(ROOT, "game", "models", "heightmap.png")
 OUT = os.path.join(ROOT, "game", "models", "island_terrain.glb")
 
 UV_U_PER_M, UV_U_OFFSET = 5.0e-5, 0.499974
@@ -160,6 +163,16 @@ def main() -> int:
         fine = np.where(cov, fine, SEA_LEVEL)
     fine = np.maximum(fine, SEA_LEVEL)
     fine.astype("<f4").tofile(HM_F32)
+    # запасной путь для игры: 8-битная PNG копия той же карты
+    y_min, y_max = float(fine.min()), float(fine.max())
+    hm_meta = json.load(open(HM_JSON))
+    hm_meta["y_min"], hm_meta["y_max"] = y_min, y_max
+    json.dump(hm_meta, open(HM_JSON, "w"), indent=1)
+    png = (np.clip((fine - y_min) / max(y_max - y_min, 1e-6), 0, 1) * 255.0)
+    try:
+        Image.fromarray(png.astype(np.uint8), "L").save(HM_PNG)
+    except Exception as exc:                       # pragma: no cover
+        print("  heightmap.png не переписан:", exc)
     print("  карта высот %d×%d по %.1f м: y %.1f…%.1f → %s"
           % (res, res, hcell, fine.min(), fine.max(), os.path.basename(HM_F32)))
 
