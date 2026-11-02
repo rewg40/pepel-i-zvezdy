@@ -289,9 +289,11 @@ def main() -> int:
     print("  покрытие меша %d, после фильтра нижнего слоя %d" % (int(cov_o_raw.sum()), int(cov_o.sum())))
     # высоты дыр — гармоническая заливка от краёв меша (медиана/сосед давали
     # ступеньки в десятки метров), плюс ограничение уклона
-    init = np.where(valid, h_o, float(np.median(h_o[valid])))
-    h_filled = harmonic_fill(init, valid, iters=3000)
-    h_filled = limit_slope(h_filled, valid, OUTER_CELL, max_step=0.6)
+    # Дальние дыры заливаем ровной «подложкой» на высоте местности: любая
+    # интерполяция по краям даёт перепад в десятки метров (меш там
+    # многослойный), а пологая подложка на горизонте читается как земля.
+    base = float(np.median(h_o[valid])) - 1.0
+    h_filled = np.full_like(h_o, base)
     fill_dist = np.zeros_like(h_o)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
