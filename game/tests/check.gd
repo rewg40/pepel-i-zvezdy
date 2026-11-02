@@ -221,10 +221,12 @@ func _run() -> void:
 		for part in ["arm_l", "leg_l", "leg_r"]:
 			var bone: String = z.PARTS[part][1]
 			var idx := skel.find_bone(bone)
-			var xf: Transform3D = skel.global_transform * skel.get_bone_global_pose(idx)
-			var p: Vector3 = xf.origin + xf.basis.y * maxf(z.bone_length(idx) * 0.5, 0.05)
-			hits[part] = p
+			# кость каждый раз пересчитываем: зомби покачивается в idle, и точка,
+			# снятая один раз, к третьему удару уезжает на другую конечность
 			for n in 3:
+				var xf: Transform3D = skel.global_transform * skel.get_bone_global_pose(idx)
+				var p: Vector3 = xf.origin + xf.basis.y * maxf(z.bone_length(idx) * 0.5, 0.05)
+				hits[part] = p
 				z.receive_hit(p, Vector3.FORWARD, 1.0, 34.0)
 				await _frames(1)
 			ok(not z.alive[part], "зомби: %s отрублена после 3 ударов" % part)
