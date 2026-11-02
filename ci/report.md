@@ -113,3 +113,22 @@ WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
 ```
+## Кадры из движка (software OpenGL)
+
+![](ci/frame_1.png)
+![](ci/frame_2.png)
+![](ci/frame_3.png)
+```
+----------------
+Done recording movie at path: /tmp/movie/f.png
+240 frames at 30 FPS (movie length: 00:00:08), recorded in 00:14:47 (0% of real-time speed).
+CPU time: 845.73 seconds (average: 3523.89 ms/frame)
+GPU time: 845.89 seconds (average: 3524.53 ms/frame)
+----------------
+exit=0
+f.wav
+f00000000.png
+f00000001.png
+f00000002.png
+f00000003.png
+```
