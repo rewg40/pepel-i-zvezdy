@@ -9,8 +9,9 @@ const SPRINT := 6.6
 const ACCEL := 12.0
 const MODEL_SCALE_DEFAULT := 1.65
 
-const ATTACK_LENGTH := 1.0          # длительность клипа Attack, сек
-const ATTACK_HIT_TIME := 0.5       # момент удара внутри клипа
+const ATTACK_LENGTH := 1.0          # длительность родного клипа Attack, сек
+const ATTACK_HIT_TIME := 0.5       # момент удара внутри родного клипа
+const ATTACK_HIT_PHASE := 0.55     # доля длины клипа, на которой приходит удар
 const ATTACK_REACH := 3.0
 const ATTACK_DAMAGE_LIMB := 1.0     # у конечности 3 HP -> 3 удара
 const ATTACK_DAMAGE_BODY := 34.0    # у тела 1000 HP -> ~30 ударов
@@ -39,6 +40,8 @@ var _yaw := 0.0
 var _pitch := -0.12
 var _attacking := false
 var _attack_timer := 0.0
+var _attack_len := ATTACK_LENGTH
+var _attack_hit := ATTACK_HIT_TIME
 var _hit_done := false
 
 
@@ -200,10 +203,10 @@ func _physics_process(delta: float) -> void:
 	# --- анимация
 	if _attacking:
 		_attack_timer += delta
-		if not _hit_done and _attack_timer >= ATTACK_HIT_TIME:
+		if not _hit_done and _attack_timer >= _attack_hit:
 			_hit_done = true
 			_do_hit()
-		if _attack_timer >= ATTACK_LENGTH:
+		if _attack_timer >= _attack_len:
 			_attacking = false
 			play("idle")
 	elif velocity.length() > 0.4:
@@ -248,6 +251,9 @@ func start_attack() -> void:
 	_hit_done = false
 	var atk := _clip(ANIMS["attack"])
 	if not atk.is_empty():
+		# длительность берём из клипа: у Mixamo замах 1.8 с, у родного 1.0 с
+		_attack_len = maxf(anim.get_animation(atk).length, 0.2)
+		_attack_hit = _attack_len * ATTACK_HIT_PHASE
 		anim.play(atk, 0.05, 1.0)
 		anim.speed_scale = 1.0
 

@@ -149,6 +149,16 @@ func _run() -> void:
 			"игрок играет клип «%s»" % pl.anim.current_animation)
 		var sword: Node3D = pl.get("sword")
 		ok(sword != null, "меч прицеплен к кисти")
+		# удар: длительность и момент попадания должны следовать клипу
+		pl.start_attack()
+		await _frames(1)
+		var atk := "MxAttack"
+		ok(pl.anim.has_animation(atk), "игрок бьёт клипом %s" % atk)
+		var clip_len: float = pl.anim.get_animation(atk).length
+		ok(absf(float(pl._attack_len) - clip_len) < 0.02,
+			"длительность удара = длине клипа (%.2f / %.2f с)" % [pl._attack_len, clip_len])
+		ok(float(pl._attack_hit) > 0.2 and float(pl._attack_hit) < clip_len,
+			"момент попадания внутри клипа (%.2f с)" % pl._attack_hit)
 
 	if zombies.size() > 0:
 		var z = zombies[0]
@@ -168,6 +178,8 @@ func _run() -> void:
 			ok(not z.alive[part], "зомби: %s отрублена после 3 ударов" % part)
 		await _frames(2)
 		ok(z.state == "crawl", "зомби: без двух ног состояние «%s»" % z.state)
+		ok(z._clip("WalkNoArms") != "",
+			"зомби: клип без рук найден (%s)" % z._clip("WalkNoArms"))
 		ok(String(z.anim.current_animation).ends_with("Crawl"),
 			"зомби: играет «%s»" % z.anim.current_animation)
 		var debris := 0
