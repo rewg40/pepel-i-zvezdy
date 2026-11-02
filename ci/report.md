@@ -89,6 +89,7 @@ PASS  zombie.glb «Walk»: 22 дорожек, битых 0, длина 1.20 с
 PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.20 с
 
 === главная сцена
+остров: тайлинг текстуры включён для 1 поверхностей
 PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
   бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
 PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
@@ -126,7 +127,6 @@ exit=0
 ![](ci/shots/04_crawl.png)
 ![](ci/shots/05_debris.png)
 ```
-OpenGL API 4.5 (Core Profile) Mesa 26.0.8-1ubuntu0.3 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 21.1.8, 256 bits)
 libpulse.so.0: cannot open shared object file: No such file or directory
 libpulse.so.0: cannot open shared object file: No such file or directory
 ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
@@ -142,6 +142,7 @@ ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
 WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
 
+остров: тайлинг текстуры включён для 1 поверхностей
 внешние клипы: +7 из res://models/medic_clips.glb
 внешние клипы: +7 из res://models/zombie_clips.glb
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
