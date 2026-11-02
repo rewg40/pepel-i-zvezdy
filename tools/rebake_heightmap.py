@@ -57,17 +57,23 @@ def heightmap(V, F, x0, x1, z0, z1, res):
         y = w0 * a[1] + w1 * b[1] + w2 * c[1]
         sub = H[iz0:iz1 + 1, ix0:ix1 + 1]
         sub[m] = np.maximum(sub[m], y[m])
-    # дыры заливаем ближайшей известной высотой (без scipy — итерациями)
+    # дыры заливаем гармонически (Лаплас): медиана даёт ступеньки в десятки
+    # метров, из которых в игре получаются вертикальные стены
     hole = H < -1e8
     H = np.where(hole, np.nan, H)
-    for _ in range(400):
+    known = ~hole
+    for _ in range(4000):
         if not np.isnan(H).any():
             break
-        nb = np.stack([np.roll(H, 1, 0), np.roll(H, -1, 0),
-                       np.roll(H, 1, 1), np.roll(H, -1, 1)])
+        pad = np.pad(H, 1, mode="edge")
+        nb = np.stack([pad[:-2, 1:-1], pad[2:, 1:-1], pad[1:-1, :-2], pad[1:-1, 2:]])
         with np.errstate(all="ignore"):
-            med = np.nanmedian(nb, axis=0)
-        H = np.where(np.isnan(H), med, H)
+            avg = np.nanmean(nb, axis=0)
+        filled = np.where(np.isnan(H), avg, H)
+        if np.abs(np.nan_to_num(filled - H)).max() < 1e-3:
+            H = filled
+            break
+        H = filled
     if np.isnan(H).any():
         H = np.nan_to_num(H, nan=float(np.nanmedian(H)))
     return H

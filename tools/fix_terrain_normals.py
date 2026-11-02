@@ -127,13 +127,26 @@ def main() -> int:
     ref = np.zeros(len(T))
     ref[inb] = H[iz[inb], ix[inb]]
     lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
-    # внутри площадки арены меш заменяется чистой сеткой по карте высот
-    # (tools/make_island_fill.py) — иначе пятна и дыры под ногами не убрать
-    in_site = (c[:, 0] > hx0) & (c[:, 0] < hx0 + (res - 1) * hcell) \
-        & (c[:, 2] > hz0) & (c[:, 2] < hz0 + (res - 1) * hcell)
-    lower |= in_site
-    print("скрыто треугольников (нижний слой + площадка арены): %d из %d в зоне"
+
+    print("скрыт нижний слой поверхности: %d треугольников из %d в зоне"
           % (int(lower.sum()), int(inb.sum())))
+
+    # --- второй слой поверхности под землёй: схлопываем в вырожденные
+    hm = json.load(open(HM_JSON))
+    res = int(hm["res"])
+    hx0, hz0, hcell = float(hm["x0"]), float(hm["z0"]), float(hm["cell"])
+    H = np.fromfile(HM_F32, dtype="<f4").astype(np.float64).reshape(res, res)
+    c = T.mean(1)
+    ix = np.round((c[:, 0] - hx0) / hcell).astype(int)
+    iz = np.round((c[:, 2] - hz0) / hcell).astype(int)
+    inb = (ix >= 0) & (iz >= 0) & (ix < res) & (iz < res)
+    ref = np.zeros(len(T))
+    ref[inb] = H[iz[inb], ix[inb]]
+    lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
+
+    print("скрыт нижний слой поверхности: %d треугольников из %d в зоне"
+          % (int(lower.sum()), int(inb.sum())))
+
     if not check and lower.any():
         F[lower] = F[lower][:, :1].repeat(3, axis=1)
         raw = F.astype(iw).tobytes()

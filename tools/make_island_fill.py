@@ -88,56 +88,31 @@ def dilate(mask, n):
     return out
 
 
-def fill_nearest(h, valid):
-    """Заливка высот от соседних валидных клеток (без scipy).
-
-    Возвращает (высоты, расстояние до ближайшей валидной клетки в клетках):
-    по расстоянию отбрасываем клетки, где высота «приехала» издалека — из
-    таких получаются вертикальные простыни вместо земли.
-    """
-    h = h.copy()
-    known = valid.copy()
-    dist = np.where(valid, 0.0, np.inf)
-    for _ in range(128):
-        if known.all():
-            break
-        acc = np.zeros_like(h)
-        cnt = np.zeros_like(h)
-        nd = np.full_like(h, np.inf)
-        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            sh = np.roll(np.roll(h, dy, 0), dx, 1)
-            sk = np.roll(np.roll(known, dy, 0), dx, 1)
-            sd = np.roll(np.roll(dist, dy, 0), dx, 1)
-            acc += np.where(sk, sh, 0.0)
-            cnt += sk
-            nd = np.minimum(nd, np.where(sk, sd, np.inf))
-        grow = (~known) & (cnt > 0)
-        h[grow] = acc[grow] / cnt[grow]
-        dist[grow] = nd[grow] + 1.0
-        known |= grow
-    return h, dist
-
-
 def local_surface(h, valid, win=7):
-    """Локальная медиана высот поверхности по валидным клеткам."""
+    """Локальная медиана высот по валидным клеткам (без scipy)."""
     stack = []
-    for dy in range(-(win // 2), win // 2 + 1):
-        for dx in range(-(win // 2), win // 2 + 1):
-            sh = np.roll(np.roll(h, dy, 0), dx, 1)
-            sk = np.roll(np.roll(valid, dy, 0), dx, 1)
+    half = win // 2
+    for dy in range(-half, half + 1):
+        for dx in range(-half, half + 1):
+            sh = shift(h, dy, dx)
+            sk = shift(valid.astype(float), dy, dx) > 0.5
             stack.append(np.where(sk, sh, np.nan))
     arr = np.stack(stack)
-    with np.errstate(all="ignore"), __import__("warnings").catch_warnings():
-        __import__("warnings").simplefilter("ignore", RuntimeWarning)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
         med = np.nanmedian(arr, axis=0)
-    # там, где валидных соседей нет вовсе, доверяем самой клетке
     return np.where(np.isnan(med), h, med)
+
+
+PAD = 16
 
 
 def shift(a, dy, dx):
     """Сдвиг массива с повтором краёв (np.roll заворачивает и портит границы)."""
-    pad = np.pad(a, ((1, 1), (1, 1)), mode="edge")
-    return pad[1 + dy:1 + dy + a.shape[0], 1 + dx:1 + dx + a.shape[1]]
+    pad = np.pad(a, PAD, mode="edge")
+    y, x = PAD + dy, PAD + dx
+    return pad[y:y + a.shape[0], x:x + a.shape[1]]
 
 
 def neighbours(a):
@@ -288,7 +263,9 @@ def main() -> int:
     # иначе на месте дыры встаёт вертикальная стена
     # высоты берём из самого меша (hmax), а не из карты высот: в дырах карта
     # экстраполирована и расходится с мешем на десятки метров
-    inner_h = harmonic_fill(heights, cov, iters=2000)
+    # высоты — из карты высот (она перепечена из этого же меша и в дырах
+    # залита гармонически), это гарантирует совпадение с коллизией
+    inner_h = heights.copy()
     inner_h = limit_slope(inner_h, cov, hcell, max_step=0.5)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
@@ -301,10 +278,11 @@ def main() -> int:
     cov_o = cov_o & (h_o > local_surface(h_o, cov_o) - 20.0)
     valid = cov_o
     print("  покрытие меша %d, после фильтра нижнего слоя %d" % (int(cov_o_raw.sum()), int(cov_o.sum())))
-    h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
+    init = np.where(valid, h_o, float(np.median(h_o[valid])))
+    h_filled = harmonic_fill(init, valid, iters=1500)
+    fill_dist = np.zeros_like(h_o)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
-    h_filled = harmonic_fill(h_filled, cov_o, iters=2000)
-    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.35)
+    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.5)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
@@ -325,8 +303,7 @@ def main() -> int:
                        "fill_inner", max_dist=None, max_step=1e6)
     if inner:
         prims.append(inner)
-    outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
-                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=1e6)
+    outer = None   # внешние заплатки не нужны: дыры у арены закрывает сетка 1 м
     if outer:
         prims.append(outer)
     if not prims:
