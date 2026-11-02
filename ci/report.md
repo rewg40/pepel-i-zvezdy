@@ -115,22 +115,22 @@ PASS  длительность удара = длине клипа (2.40 / 2.40 �
 PASS  момент попадания внутри клипа (1.32 с)
 PASS  зомби: тело 1000 HP (1000)
 PASS  зомби: рука 3 HP
-PASS  зомби: arm_l отрублена после 3 ударов
+FAIL  зомби: arm_l отрублена после 3 ударов
 PASS  зомби: leg_l отрублена после 3 ударов
 PASS  зомби: leg_r отрублена после 3 ударов
 PASS  зомби: без двух ног состояние «crawl»
 PASS  зомби: клип без рук найден (WalkNoArms)
 PASS  зомби: играет «MxCrawl»
-PASS  куски конечностей на земле: 3
+FAIL  куски конечностей на земле: 2
 PASS  куски не наследуют красную вспышку удара
-PASS  зомби: тело держит удар (осталось 966 HP)
+PASS  зомби: тело держит удар (осталось 932 HP)
 ERROR: Parameter "m" is null.
    at: mesh_get_surface_count (servers/rendering/dummy/storage/mesh_storage.h:120)
 
-=== итог: 86 проверок, 0 провалов
+=== итог: 86 проверок, 2 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
-exit=0
+exit=1
 ```
 ## Скриншоты из движка (llvmpipe / OpenGL 3)
 
