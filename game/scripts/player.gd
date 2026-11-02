@@ -20,6 +20,7 @@ const ANIMS := {
 }
 
 @export var model_scale := MODEL_SCALE_DEFAULT
+@export_file("*.glb") var extra_clips := "res://models/medic_clips.glb"
 @export var mouse_sensitivity := 0.0025
 @export var sword_offset := Vector3(0.0, 0.02, 0.0)
 @export var sword_rotation_deg := Vector3(180.0, 0.0, 0.0)
@@ -63,6 +64,7 @@ func _ready() -> void:
 
 	anim = _find_anim(model)
 	skeleton = _find_skeleton(model)
+	_merge_clips(anim, extra_clips)
 	for n in ANIMS.values():
 		if anim and not anim.has_animation(n):
 			push_warning("в модели нет анимации " + n)
@@ -88,6 +90,39 @@ func _find_anim(root: Node) -> AnimationPlayer:
 		return c
 	return null
 
+
+## Дополнительная библиотека клипов (сборка tools/retarget.py). Если файла нет,
+## игра работает как раньше: анимации берутся из самой модели.
+func _merge_clips(p: AnimationPlayer, path: String) -> int:
+	if p == null or path.is_empty() or not ResourceLoader.exists(path):
+		return 0
+	var packed := load(path) as PackedScene
+	if packed == null:
+		return 0
+	var holder := packed.instantiate()
+	var src: AnimationPlayer = null
+	for c in holder.find_children("*", "AnimationPlayer", true, false):
+		src = c
+		break
+	var added := 0
+	if src != null:
+		if not p.has_animation_library(""):
+			p.add_animation_library("", AnimationLibrary.new())
+		var dst_lib := p.get_animation_library("")
+		for lib_name in src.get_animation_library_list():
+			var lib: AnimationLibrary = src.get_animation_library(lib_name)
+			if lib == null:
+				continue
+			for a in lib.get_animation_list():
+				var an := String(a)
+				if p.has_animation(an):
+					continue          # своя анимация важнее внешней
+				dst_lib.add_animation(an, lib.get_animation(an))
+				added += 1
+	holder.queue_free()
+	if added > 0:
+		print("внешние клипы: +", added, " из ", path)
+	return added
 
 func _find_skeleton(root: Node) -> Skeleton3D:
 	for c in root.find_children("*", "Skeleton3D", true, false):

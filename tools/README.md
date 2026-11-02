@@ -48,3 +48,45 @@ python tools/build_sword.py game/models/sword.glb
 | `build_sword.py` | нормализация меча |
 | `render.py` / `check_glb.py` / `filmstrip.py` | офлайн-проверка: скиннинг, кадры анимаций |
 | `inspect_glb.py` | структура GLB (узлы, меши, анимации) |
+| `retarget.py` | чужие клипы (Mixamo / Quaternius / любой humanoid GLB) → наши кости |
+| `selftest_retarget.py` | круговой тест ретаргета: наш клип → чужой риг → обратно |
+
+## Внешние анимации (ретаргет)
+
+Клипы не обязаны быть «своими»: `tools/retarget.py` перепекает любой humanoid-GLB
+(Mixamo, Quaternius Universal Animation Library, KayKit…) на **наш** скелет, так
+что в Godot не нужны ни BoneMap, ни SkeletonProfile — это обычные glTF-анимации
+с нашими именами костей.
+
+```bash
+# 1. FBX из Mixamo -> GLB (Blender: File > Export > glTF, без меша достаточно
+#    "Selected Objects" = арматура + Action)
+# 2. перепечь на нужного персонажа
+/tmp/venv/bin/python tools/retarget.py clips/*.glb game/models/zombie.glb \
+    game/models/zombie_clips.glb
+```
+
+Полезные ключи:
+
+| ключ | зачем |
+|---|---|
+| `--list` | показать, какая кость источника легла на какую нашу (ничего не пишет) |
+| `--map Spine=Spine1` | поправить маппинг вручную, если имена незнакомые |
+| `--clips Walk,Run` | оставить только нужные клипы |
+| `--strip-xz` | убрать горизонтальное движение бёдер (клип «на месте») |
+| `--ground` | приподнять/опустить клип так, чтобы нижняя точка бёдер была на уровне rest |
+| `--fps 30` | частота пересэмплирования |
+| `--no-probe` | не добавлять служебный квад (без него Godot не создаст Skeleton3D) |
+
+На выходе — файл с rest-скелетом персонажа, кожей и анимациями; имя узла
+арматуры совпадает с персонажем (`Medic_Rig` / `Zombie_Rig`), поэтому track-пути
+(`Skeleton3D:<bone>`) в Godot такие же, как у родных клипов. `player.gd` и
+`zombie.gd` подхватывают файл автоматически, если он лежит по пути из
+`extra_clips` (`res://models/medic_clips.glb`, `res://models/zombie_clips.glb`):
+клипы вливаются в default-библиотеку `AnimationPlayer` и не перекрывают родные.
+
+Проверка математики без Godot:
+
+```bash
+/tmp/venv/bin/python tools/selftest_retarget.py
+```
