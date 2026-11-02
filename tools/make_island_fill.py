@@ -37,8 +37,8 @@ UV_U_PER_M, UV_U_OFFSET = 5.0e-5, 0.499974
 UV_V_PER_M, UV_V_OFFSET = 7.0e-5, 0.505151
 
 INNER_DILATE = 2        # клеток: заплатка заходит под соседние треугольники
-OUTER_CELL = 4.0        # м
-OUTER_RADIUS = 900.0    # м от центра арены
+OUTER_CELL = 6.0        # м
+OUTER_RADIUS = 2000.0   # м от центра арены
 SINK = 0.15             # м ниже меша, чтобы не мерцать на стыках
 MIN_LAND_Y = 60.0       # ниже — считаем водой, дыры там не нужны
 
@@ -230,7 +230,7 @@ def main() -> int:
     valid = cov_o
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
-    h_filled = smooth_holes(h_filled, cov_o)
+    h_filled = smooth_holes(h_filled, cov_o, iters=40)
     h_filled = limit_slope(h_filled, cov_o, OUTER_CELL)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
