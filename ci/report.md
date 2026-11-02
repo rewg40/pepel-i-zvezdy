@@ -102,10 +102,10 @@ PASS  остров: земля на родном атласе 4096px
 PASS  остров: земля на шейдере ground.gdshader
 PASS  шейдер земли получает атлас
 PASS  шейдер земли получает зерно
-PASS  заплатки земли в дырах острова: треугольников 40840
+PASS  заплатки земли в дырах острова: треугольников 110592
 PASS  заплатки рисуются шейдером земли (атлас + зерно)
 PASS  карта высот загружена в float32 (высота в метрах)
-PASS  высота арены из карты (1405.00) совпадает с arena.json (1405.00)
+FAIL  высота арены из карты (1356.94) совпадает с arena.json (1405.00)
 PASS  игрок: скелет и AnimationPlayer
 PASS  игрок играет клип «MxIdle»
 PASS  меч прицеплен к кисти
@@ -126,10 +126,10 @@ PASS  зомби: тело держит удар (осталось 966 HP)
 ERROR: Parameter "m" is null.
    at: mesh_get_surface_count (servers/rendering/dummy/storage/mesh_storage.h:120)
 
-=== итог: 85 проверок, 0 провалов
+=== итог: 85 проверок, 1 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
-exit=0
+exit=1
 ```
 ## Скриншоты из движка (llvmpipe / OpenGL 3)
 
@@ -157,8 +157,8 @@ WARNING: All audio drivers failed, falling back to the dummy driver.
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
 shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
 shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
-зомби-ползун: body y=1405.20 model y=0.00 lowest bone=Hand_R y=1405.58 lowest mesh y=1404.54 on_floor=true
-игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.558, 1407.285, -77.75944)
+зомби-ползун: body y=1356.94 model y=0.00 lowest bone=Hand_R y=1357.31 lowest mesh y=1356.27 on_floor=true
+игрок y=1356.94 pos=(1309.365, 1356.935, -69.25084), камера=(1311.564, 1401.787, -77.53088)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
 shot 08_only_ocean (800, 450) -> /tmp/shots/08_only_ocean.png err=0
