@@ -37,20 +37,20 @@ func _setup_environment() -> void:
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.26, 0.37, 0.55)
-	sky_mat.sky_horizon_color = Color(0.66, 0.66, 0.64)
+	sky_mat.sky_horizon_color = Color(0.60, 0.63, 0.68)
 	sky_mat.ground_bottom_color = Color(0.20, 0.20, 0.19)
-	sky_mat.ground_horizon_color = Color(0.55, 0.52, 0.47)
+	sky_mat.ground_horizon_color = Color(0.42, 0.42, 0.43)
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.32
+	env.ambient_light_energy = 0.40
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.66, 0.66, 0.62)
-	env.fog_density = 0.0009
+	env.fog_light_color = Color(0.62, 0.66, 0.72)
+	env.fog_density = 0.0007
 	# ACES не задирает средние тона: атлас острова сам по себе светлый (песок
 	# ~0.8), с FILMIC + ambient 0.55 земля уходила в сплошной белый
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.0
+	env.tonemap_exposure = 0.85
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
@@ -58,15 +58,15 @@ func _setup_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 1.0
-	sun.light_color = Color(1.0, 0.94, 0.86)
+	sun.light_energy = 0.95
+	sun.light_color = Color(1.0, 0.97, 0.92)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 180.0
 	add_child(sun)
 
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18, 60, 0)
-	fill.light_energy = 0.12
+	fill.light_energy = 0.15
 	fill.light_color = Color(0.6, 0.72, 0.9)
 	add_child(fill)
 
