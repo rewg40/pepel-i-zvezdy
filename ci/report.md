@@ -112,9 +112,10 @@ PASS  зомби: без двух ног состояние «crawl»
 PASS  зомби: клип без рук найден (WalkNoArms)
 PASS  зомби: играет «MxCrawl»
 PASS  куски конечностей на земле: 3
+PASS  куски не наследуют красную вспышку удара
 PASS  зомби: тело держит удар (осталось 966 HP)
 
-=== итог: 76 проверок, 0 провалов
+=== итог: 77 проверок, 0 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
