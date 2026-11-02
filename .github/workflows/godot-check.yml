@@ -1,0 +1,36 @@
+name: godot-check
+
+on:
+  push:
+    branches: ['arena/**']
+    paths-ignore: ['ci/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.3
+        run: |
+          set -e
+          curl -sSL -o /tmp/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          mv /tmp/godot/Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Report
+        run: |
+          {
+            echo "# Godot $(godot --version 2>&1)"
+            echo
+            echo '```'
+          } > ci/report.md
+          exit 0
