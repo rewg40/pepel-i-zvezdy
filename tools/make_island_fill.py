@@ -204,9 +204,11 @@ def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
                     new_idx.append(len(verts) + len(extra_v) - 1)
                 idx = new_idx
                 flattened += 1
-            a, b, c, d = idx
-            tris.append((a, b, c))
-            tris.append((b, d, c))
+            a, b, c, d = idx          # a=(ix,iz) b=(ix+1,iz) c=(ix,iz+1) d=(ix+1,iz+1)
+            # обход против часовой при взгляде сверху: нормаль смотрит вверх
+            # ((a,b,c) дало бы нормаль вниз и тёмные треугольники)
+            tris.append((a, c, b))
+            tris.append((b, c, d))
     if not tris:
         print("  %-14s пусто" % name)
         return None
