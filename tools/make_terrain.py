@@ -136,6 +136,20 @@ def main() -> int:
     pits = valid & (h < surf - 8.0)
     h = np.where(pits, surf - 0.2, h)
 
+    # Децимированные треугольники шириной в километр дают над ареной завышенные
+    # высоты (до +50 м): оставлять их на сетке 24 м нельзя — на краю площадки
+    # получается стена. Внутри площадки высоты берём из ближней сетки (ниже),
+    # а узлы грубой сетки там заполняем от внешней границы.
+    gx = x0 + np.arange(nx) * COARSE_CELL
+    gz = z0 + np.arange(nz) * COARSE_CELL
+    node_inside = ((gx[None, :] >= hx0) & (gx[None, :] <= hx1)
+                   & (gz[:, None] >= hz0) & (gz[:, None] <= hz1))
+    if node_inside.any():
+        outside = valid & ~node_inside
+        seed = float(np.median(h[outside])) if outside.any() else float(np.median(h[valid]))
+        h_pad = harmonic_fill(np.where(outside, h, seed), outside, iters=3000)
+        h = np.where(node_inside, h_pad, h)
+
     inside_fine = ((x0 + np.arange(nx) * COARSE_CELL)[None, :] >= hx0) & \
                   ((x0 + np.arange(nx) * COARSE_CELL)[None, :] <= hx1) & \
                   ((z0 + np.arange(nz) * COARSE_CELL)[:, None] >= hz0) & \
