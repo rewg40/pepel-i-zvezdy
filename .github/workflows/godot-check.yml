@@ -55,6 +55,27 @@ jobs:
           echo "exit=$?" >> /tmp/check.log
           cat /tmp/check.log
 
+      - name: Render frames (software)
+        continue-on-error: true
+        run: |
+          set +e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null 2>&1
+          mkdir -p /tmp/movie
+          timeout 900 xvfb-run -a godot --path game --resolution 960x540 \
+            --rendering-driver opengl3 --fixed-fps 30 \
+            --write-movie /tmp/movie/f.png --quit-after 240 > /tmp/render.log 2>&1
+          echo "exit=$?" >> /tmp/render.log
+          ls /tmp/movie | head -5 >> /tmp/render.log
+          tail -20 /tmp/render.log
+          mkdir -p ci
+          i=0
+          for f in $(ls /tmp/movie/*.png 2>/dev/null | awk 'NR==2 || NR==90 || NR==150'); do
+            i=$((i+1))
+            cp "$f" "ci/frame_$i.png"
+          done
+          ls -l ci || true
+
       - name: Build report
         if: always()
         run: |
@@ -75,6 +96,14 @@ jobs:
             echo '## tests/check.gd'
             echo '```'
             cat /tmp/check.log 2>/dev/null
+            echo '```'
+            echo '## Кадры из движка (software OpenGL)'
+            echo
+            if ls ci/frame_*.png >/dev/null 2>&1; then
+              for f in ci/frame_*.png; do echo "![]($f)"; done
+            fi
+            echo '```'
+            tail -12 /tmp/render.log 2>/dev/null || echo "(рендера не было)"
             echo '```'
           } > ci/report.md
           git config user.name "godot-check"

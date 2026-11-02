@@ -180,5 +180,7 @@ func _run() -> void:
 		ok(z.hp > 900.0, "зомби: тело держит удар (осталось %.0f HP)" % z.hp)
 
 	await _frames(3)
+	scene.queue_free()
+	await _frames(3)
 	print("\n=== итог: %d проверок, %d провалов" % [checks, fails])
 	quit(0 if fails == 0 else 1)
