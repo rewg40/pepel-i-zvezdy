@@ -133,18 +133,10 @@ func _run() -> void:
 	if island != null:
 		# по одному материалу с того же ракурса, что 02
 		await _place(pp + Vector3(7.0, 6.5, 8.5), pp + Vector3(0, 0.8, -6.0))
-		var fill := scene.get_node_or_null("IslandFill") as Node3D
-		if fill != null:
-			fill.visible = false
 		for mname in ["Ocean", "Seafloor", "Islet", "Vegetation"]:
 			_only_materials(island, [mname])
 			await _shot("08_only_" + mname.to_lower())
 		_only_materials(island, [])
-		if fill != null:
-			_only_materials(island, ["-"])
-			fill.visible = true
-			await _shot("08_only_fill")
-			_only_materials(island, [])
 		var by_mat := {}
 		for mi in island.find_children("*", "MeshInstance3D", true, false):
 			var m := mi as MeshInstance3D
@@ -156,15 +148,12 @@ func _run() -> void:
 		print("материалы острова: ", by_mat)
 		var far := pp + Vector3(0, 30, 90)
 		await _place(far, pp + Vector3(0, 40, -600))
-		_only_materials(island, ["Island"])
-		if fill != null:
-			fill.visible = true
+		# земля — только терраин: исходный меш острова скрыт в main.gd
+		_only_materials(island, ["-"])
 		await _shot("06_terrain_only")
-		# тот же кадр без заплаток: видно, чьи это дыры — меша или заплатки
-		if fill != null:
-			fill.visible = false
-			await _shot("09_terrain_no_fill")
-			fill.visible = true
+		# терраин + растительность: как остров читается без воды и островков
+		_only_materials(island, ["Vegetation"])
+		await _shot("09_terrain_vegetation")
 		_only_materials(island, ["Ocean", "Seafloor", "Islet"])
 		await _shot("07_water_only")
 		_only_materials(island, [])

@@ -45,6 +45,10 @@ python tools/build_sword.py game/models/sword.glb
 | `rig.py` | кости/матрицы, позы (idle, walk, run, attack, hit, death, crawl…) |
 | `build_char.py` | сборка GLB персонажа: 6 частей, культи, копии деталей, анимации |
 | `build_island.py` | децимация острова + heightmap + выбор арены |
+| `make_terrain.py` | терраин игры из ИСХОДНОГО меша: 1 м у арены (та же карта идёт в коллизию) + 24 м по острову → `game/models/island_terrain.glb` |
+| `make_ground_mottle.py` | бежевые разводы из родного атласа (повтор ~320 м) → `game/models/ground_mottle.png` |
+| `make_ground_detail.py` | мелкое зерно-множитель из атласа (повтор ~9 м) → `game/models/ground_detail.png` |
+| `make_island_fill.py` / `hide_plateau.py` / `fix_terrain_normals.py` / `rebake_heightmap.py` | старые шаги заплаток в децимированном меше; после перехода на `make_terrain.py` не нужны |
 | `build_sword.py` | нормализация меча |
 | `render.py` / `check_glb.py` / `filmstrip.py` | офлайн-проверка: скиннинг, кадры анимаций |
 | `inspect_glb.py` | структура GLB (узлы, меши, анимации) |
