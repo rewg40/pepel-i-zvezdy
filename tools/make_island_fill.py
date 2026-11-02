@@ -117,28 +117,24 @@ def fill_nearest(h, valid):
     return h, dist
 
 
-def smooth_holes(h, valid, iters=60):
-    """Сглаживание восстановленных высот внутри дыр (границы не трогаем):
-    без него в больших дырах остаются ступеньки и «простыни»."""
+def harmonic_fill(h, valid, iters=2000, tol=1e-3):
+    """Гармоническая интерполяция высот в дырах (решение Лапласа, Якоби).
+
+    Копирование высот от ближайшего треугольника даёт скачок на границе дыры
+    (в heightmap дыры экстраполированы и расходятся с мешем на десятки метров),
+    а сглаживание в лоб — «пилу». Лаплас по построению гладкий и точно совпадает
+    с мешем на границе: получается пологий лоскут без ступенек.
+    """
     h = h.copy()
-    for _ in range(iters):
+    for i in range(iters):
         nb = (np.roll(h, 1, 0) + np.roll(h, -1, 0)
-              + np.roll(h, 1, 1) + np.roll(h, -1, 1)) / 4.0
-        h = np.where(valid, h, nb)
-    return h
-
-
-def limit_slope(h, valid, cell, max_step=1.5, iters=80):
-    """Ограничиваем уклон восстановленных высот: клетка не может отличаться от
-    соседей больше чем на max_step клеток. Так вместо вертикальных простыней
-    получается пологий склон, и ни одну клетку не нужно выбрасывать."""
-    h = h.copy()
-    lim = max_step * cell
-    for _ in range(iters):
-        nb = [np.roll(h, 1, 0), np.roll(h, -1, 0), np.roll(h, 1, 1), np.roll(h, -1, 1)]
-        mn = np.minimum.reduce(nb)
-        mx = np.maximum.reduce(nb)
-        h = np.where(valid, h, np.clip(h, mn - lim, mx + lim))
+              + np.roll(h, 1, 1) + np.roll(h, -1, 1)) * 0.25
+        new = np.where(valid, h, nb)
+        delta = float(np.abs(new - h).max())
+        h = new
+        if delta < tol:
+            print("    заливка сошлась за %d итераций (d=%.1e м)" % (i + 1, delta))
+            break
     return h
 
 
@@ -242,8 +238,7 @@ def main() -> int:
     # heightmap в дырах экстраполирован и местами врёт на десятки метров
     # (перепад 47 м на одной клетке) — сглаживаем и ограничиваем уклон,
     # иначе на месте дыры встаёт вертикальная стена
-    inner_h = smooth_holes(heights, cov, iters=40)
-    inner_h = limit_slope(inner_h, cov, hcell, max_step=1.0, iters=250)
+    inner_h = harmonic_fill(heights, cov, iters=2000)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
     ox0 = ax - OUTER_RADIUS
@@ -253,8 +248,7 @@ def main() -> int:
     valid = cov_o
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
-    h_filled = smooth_holes(h_filled, cov_o, iters=40)
-    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL)
+    h_filled = harmonic_fill(h_filled, cov_o, iters=2000)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
