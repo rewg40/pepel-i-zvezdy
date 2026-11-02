@@ -51,6 +51,7 @@ func _process(_delta: float) -> void:
 			continue
 		var legs := int(z.alive["leg_l"]) + int(z.alive["leg_r"])
 		var arms := int(z.alive["arm_l"]) + int(z.alive["arm_r"])
-		var mode := {"walk": "идёт", "limp": "хромает", "crawl": "ползёт"}.get(z.state, z.state)
+		var mode: String = {"walk": "идёт", "limp": "хромает",
+			"crawl": "ползёт"}.get(z.state, z.state)
 		l.text = "%s  тело %.0f/%.0f  руки %d/2  ноги %d/2  (%s)" % [
 			z.title, z.hp, z.max_hp, arms, legs, mode]

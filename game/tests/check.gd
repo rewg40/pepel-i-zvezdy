@@ -134,11 +134,13 @@ func _run() -> void:
 	var players: Array = scene.get("players")
 	ok(players.size() >= 1, "игроков: %d" % players.size())
 	ok(zombies.size() == 3, "зомби: %d" % zombies.size())
-	var island: MeshInstance3D = null
-	for m in scene.find_children("*", "MeshInstance3D", true, false):
-		if String(m.name).to_lower().contains("island"):
-			island = m
-	ok(island != null, "остров на сцене")
+	var island := scene.get_node_or_null("Island") as Node3D
+	var island_meshes := 0
+	if island != null:
+		for m in island.find_children("*", "MeshInstance3D", true, false):
+			island_meshes += 1
+	ok(island != null and island_meshes > 0,
+		"остров на сцене: узлов-мешей %d" % island_meshes)
 
 	if players.size() > 0:
 		var pl = players[0]
@@ -158,7 +160,7 @@ func _run() -> void:
 			var bone: String = z.PARTS[part][1]
 			var idx := skel.find_bone(bone)
 			var xf: Transform3D = skel.global_transform * skel.get_bone_global_pose(idx)
-			var p := xf.origin + xf.basis.y * maxf(skel.get_bone_length(idx) * 0.5, 0.05)
+			var p: Vector3 = xf.origin + xf.basis.y * maxf(z.bone_length(idx) * 0.5, 0.05)
 			hits[part] = p
 			for n in 3:
 				z.receive_hit(p, Vector3.FORWARD, 1.0, 34.0)

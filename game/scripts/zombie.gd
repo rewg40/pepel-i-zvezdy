@@ -262,12 +262,23 @@ func _closest_part(point: Vector3) -> String:
 			continue
 		var pose: Transform3D = skeleton.global_transform * skeleton.get_bone_global_pose(idx)
 		var a: Vector3 = pose.origin
-		var b: Vector3 = pose * Vector3(0, skeleton.get_bone_length(idx), 0)
+		var b: Vector3 = pose * Vector3(0, bone_length(idx), 0)
 		var d := _dist_to_segment(point, a, b)
 		if d < best_d:
 			best_d = d
 			best = part
 	return best
+
+
+## Длина кости: в Godot 4.3 нет Skeleton3D.get_bone_length(), считаем
+## по rest-позе дочерней кости (0.12 м для листьев — кисти, стопы).
+func bone_length(idx: int) -> float:
+	if skeleton == null or idx < 0:
+		return 0.12
+	for c in skeleton.get_bone_count():
+		if skeleton.get_bone_parent(c) == idx:
+			return skeleton.get_bone_rest(c).origin.length()
+	return 0.12
 
 
 func _dist_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:

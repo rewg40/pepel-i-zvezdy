@@ -30,13 +30,28 @@ jobs:
       - name: Import project
         run: |
           timeout 900 godot --headless --path game --import 2>&1 | tee /tmp/import.log || true
-          tail -40 /tmp/import.log
+          grep -E "ERROR|SCRIPT" /tmp/import.log | head -20 || echo "(ошибок импорта нет)"
+
+      - name: Parse all scripts
+        run: |
+          : > /tmp/parse.log
+          for f in $(find game/scripts game/tests -name '*.gd' | sort); do
+            res="res://${f#game/}"
+            out=$(timeout 120 godot --headless --path game --check-only --script "$res" 2>&1)
+            if echo "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+              echo "### $res" >> /tmp/parse.log
+              echo "$out" | grep -E "SCRIPT ERROR|Parse Error|at:" >> /tmp/parse.log
+            else
+              echo "ok   $res" >> /tmp/parse.log
+            fi
+          done
+          cat /tmp/parse.log
 
       - name: Run checks
-        id: tests
         run: |
           set +e
-          timeout 600 godot --headless --path game --script res://tests/check.gd > /tmp/check.log 2>&1
+          timeout 600 godot --headless --path game --quit-after 30000 \
+            --script res://tests/check.gd > /tmp/check.log 2>&1
           echo "exit=$?" >> /tmp/check.log
           cat /tmp/check.log
 
@@ -49,13 +64,17 @@ jobs:
             echo
             echo "Godot: \`$(godot --version 2>&1 | tail -1)\`"
             echo
+            echo '## Разбор скриптов (`--check-only`)'
+            echo '```'
+            cat /tmp/parse.log 2>/dev/null || echo "(нет данных)"
+            echo '```'
             echo '## Импорт проекта'
             echo '```'
-            grep -E "ERROR|WARNING|SCRIPT|error" /tmp/import.log | head -40 || echo "(ошибок нет)"
+            grep -E "ERROR|SCRIPT|WARNING" /tmp/import.log | head -40 || echo "(ошибок нет)"
             echo '```'
             echo '## tests/check.gd'
             echo '```'
-            cat /tmp/check.log
+            cat /tmp/check.log 2>/dev/null
             echo '```'
           } > ci/report.md
           git config user.name "godot-check"
@@ -63,3 +82,17 @@ jobs:
           git add ci/report.md
           git commit -m "ci: отчёт проверки движком [skip ci]" || echo "нечего коммитить"
           git push || echo "push не удался"
+
+      - name: Fail on errors
+        if: always()
+        run: |
+          if grep -q "FAIL " /tmp/check.log 2>/dev/null; then
+            echo "есть проваленные проверки"; exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" /tmp/check.log /tmp/parse.log 2>/dev/null; then
+            echo "есть ошибки скриптов"; exit 1
+          fi
+          if ! grep -q "итог" /tmp/check.log 2>/dev/null; then
+            echo "тест не дошёл до конца"; exit 1
+          fi
+          echo "всё чисто"
