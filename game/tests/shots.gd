@@ -131,6 +131,12 @@ func _run() -> void:
 	# 6-7. диагностика: что именно занимает дальний план
 	var island := scene.get_node_or_null("Island")
 	if island != null:
+		# по одному материалу с того же ракурса, что 02
+		await _place(pp + Vector3(7.0, 6.5, 8.5), pp + Vector3(0, 0.8, -6.0))
+		for mname in ["Ocean", "Seafloor", "Islet", "Vegetation"]:
+			_only_materials(island, [mname])
+			await _shot("08_only_" + mname.to_lower())
+		_only_materials(island, [])
 		var by_mat := {}
 		for mi in island.find_children("*", "MeshInstance3D", true, false):
 			var m := mi as MeshInstance3D
