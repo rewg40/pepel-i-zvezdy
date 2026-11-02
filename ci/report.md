@@ -128,8 +128,6 @@ exit=0
 ![](ci/shots/04_crawl.png)
 ![](ci/shots/05_debris.png)
 ```
-libpulse.so.0: cannot open shared object file: No such file or directory
-libpulse.so.0: cannot open shared object file: No such file or directory
 ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
 ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
 ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
@@ -149,6 +147,8 @@ WARNING: All audio drivers failed, falling back to the dummy driver.
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
 shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
 shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
+зомби-ползун: body y=1405.25 model y=0.00 lowest bone=Hand_R y=1405.62 lowest mesh y=1404.59 on_floor=true
+игрок y=1404.13 pos=(1309.365, 1404.127, -69.25084), камера=(1311.564, 1407.202, -77.82819)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
 готово
