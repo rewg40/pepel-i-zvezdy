@@ -93,7 +93,8 @@ func _spawn_island() -> void:
 	island.name = "Island"
 	add_child(island)
 	_fix_island_materials(island)
-	_spawn_island_fill()
+	_spawn_terrain()
+	_raise_water()
 	_make_heightmap_collision()
 
 
@@ -195,36 +196,60 @@ const UV_V_PER_M := 7.0e-5
 const UV_V_OFFSET := 0.505151
 
 
-## В меше острова есть дыры: у арены 13.8 % площади не покрыто ни одним
-## треугольником, по острову — около 5 % суши (сквозь них видно пустоту, на
-## кадрах это чёрные «стрелки» посреди песка). Заплатки посчитаны офлайн
-## (tools/make_island_fill.py → models/island_fill.glb): 1 м в зоне heightmap,
-## где ходит игрок, и 4 м в радиусе 900 м. UV и высоты — от самого острова,
-## поэтому цвет и рельеф совпадают; рисуются тем же шейдером земли.
-const ISLAND_FILL := "res://models/island_fill.glb"
+## Терраин рисуется заново по высотам (tools/make_terrain.py →
+## models/island_terrain.glb): у арены сетка 1 м по heightmap.f32 (она же
+## коллизия), остальной остров — сетка 24 м по верхней огибающей меша.
+## Исходный меш острова для этого не годится: децимация оставила дыры,
+## наложенные слои и треугольники размером в километр.
+const TERRAIN := "res://models/island_terrain.glb"
+const TERRAIN_MESH_NAME := "node_0"
 
 
-func _spawn_island_fill() -> void:
-	if not ResourceLoader.exists(ISLAND_FILL):
-		push_warning("нет " + ISLAND_FILL + " — дыры в земле останутся")
+func _spawn_terrain() -> void:
+	var island := get_node_or_null("Island")
+	if island != null:
+		# прячем исходный меш терраина (растительность и островки остаются)
+		for mi in island.find_children("*", "MeshInstance3D", true, false):
+			if String((mi as Node).name) == TERRAIN_MESH_NAME:
+				(mi as MeshInstance3D).visible = false
+	if not ResourceLoader.exists(TERRAIN):
+		push_warning("нет " + TERRAIN + " — земля не нарисована")
 		return
-	var packed := load(ISLAND_FILL) as PackedScene
+	var packed := load(TERRAIN) as PackedScene
 	if packed == null:
-		push_warning(ISLAND_FILL + " не загрузился")
+		push_warning(TERRAIN + " не загрузился")
 		return
-	var fill := packed.instantiate()
-	fill.name = "IslandFill"
-	add_child(fill)
+	var terrain := packed.instantiate()
+	terrain.name = "IslandTerrain"
+	add_child(terrain)
 	var n := 0
-	for mi in fill.find_children("*", "MeshInstance3D", true, false):
+	for mi in terrain.find_children("*", "MeshInstance3D", true, false):
 		var m := mi as MeshInstance3D
 		if _ground_mat != null:
 			m.material_override = _ground_mat
-		# заплатка лежит вровень с землёй и не должна отбрасывать тень:
-		# иначе на ней самой появляются чёрные треугольники (shadow acne)
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		n += 1
-	print("заплатки земли: ", n, " мешей")
+	print("терраин: ", n, " мешей по картам высот")
+
+
+## Море и дно в исходной модели висят на y = 0, а остров — на ~1400 м,
+## то есть «вода» оказывалась в 1.4 км ниже земли. Поднимаем её к острову.
+const WATER_LEVEL := 1330.0
+
+
+func _raise_water() -> void:
+	var island := get_node_or_null("Island")
+	if island == null:
+		return
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var mat := m.mesh.surface_get_material(0)
+		var nm := "" if mat == null else String(mat.resource_name)
+		if nm == "Ocean" or nm == "Seafloor":
+			m.global_position.y += WATER_LEVEL
+			m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).

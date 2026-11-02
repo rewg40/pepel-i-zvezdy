@@ -165,20 +165,27 @@ func _run() -> void:
 		ok(sm.get_shader_parameter("atlas") != null, "шейдер земли получает атлас")
 		ok(sm.get_shader_parameter("detail") != null, "шейдер земли получает зерно")
 
-	# в меше острова есть дыры — их закрывают офлайн-заплатки island_fill.glb
-	var fill := scene.get_node_or_null("IslandFill")
-	var fill_tris := 0
-	var fill_ok_mat := true
-	if fill != null:
-		for m in fill.find_children("*", "MeshInstance3D", true, false):
+	# терраин рисуется по картам высот: сетка 1 м у арены + 24 м по острову
+	var terrain := scene.get_node_or_null("IslandTerrain")
+	var terrain_tris := 0
+	var terrain_ok_mat := true
+	if terrain != null:
+		for m in terrain.find_children("*", "MeshInstance3D", true, false):
 			var mi := m as MeshInstance3D
 			if mi.mesh != null:
-				fill_tris += mi.mesh.get_faces().size() / 3
+				terrain_tris += mi.mesh.get_faces().size() / 3
 			if not (mi.material_override is ShaderMaterial):
-				fill_ok_mat = false
-	ok(fill != null and fill_tris > 20000,
-		"заплатки земли в дырах острова: треугольников %d" % fill_tris)
-	ok(fill_ok_mat, "заплатки рисуются шейдером земли (атлас + зерно)")
+				terrain_ok_mat = false
+	ok(terrain != null and terrain_tris > 100000,
+		"терраин по картам высот: треугольников %d" % terrain_tris)
+	ok(terrain_ok_mat, "терраин рисуется шейдером земли (атлас + зерно)")
+	var src := scene.get_node_or_null("Island")
+	var src_visible := false
+	if src != null:
+		for m in src.find_children("*", "MeshInstance3D", true, false):
+			if String((m as Node).name) == "node_0" and (m as MeshInstance3D).visible:
+				src_visible = true
+	ok(not src_visible, "исходный меш терраина скрыт")
 	var hm: Dictionary = scene.get("_hm")
 	ok(not hm.is_empty() and float(hm.get("data", PackedFloat32Array())[0]) > 1000.0,
 		"карта высот загружена в float32 (высота в метрах)")
