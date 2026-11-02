@@ -145,8 +145,8 @@ exit=0
 ![](ci/shots/08_only_ocean.png)
 ![](ci/shots/08_only_seafloor.png)
 ![](ci/shots/08_only_vegetation.png)
+![](ci/shots/09_terrain_no_fill.png)
 ```
-   at: init_output_device (drivers/alsa/audio_driver_alsa.cpp:90)
 WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
 
@@ -168,6 +168,7 @@ shot 08_only_vegetation (800, 450) -> /tmp/shots/08_only_vegetation.png err=0
 shot 08_only_fill (800, 450) -> /tmp/shots/08_only_fill.png err=0
 материалы острова: { "Island": 1, "Ocean": 1, "Seafloor": 1, "Islet": 37, "Vegetation": 20 }
 shot 06_terrain_only (800, 450) -> /tmp/shots/06_terrain_only.png err=0
+shot 09_terrain_no_fill (800, 450) -> /tmp/shots/09_terrain_no_fill.png err=0
 shot 07_water_only (800, 450) -> /tmp/shots/07_water_only.png err=0
 готово
 exit=0
