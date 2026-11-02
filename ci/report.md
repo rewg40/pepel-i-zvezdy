@@ -9,6 +9,7 @@ ok   res://scripts/main.gd
 ok   res://scripts/player.gd
 ok   res://scripts/zombie.gd
 ok   res://tests/check.gd
+ok   res://tests/shots.gd
 ```
 ## Импорт проекта
 ```
@@ -121,9 +122,9 @@ exit=0
 ```
 ----------------
 Done recording movie at path: /tmp/movie/f.png
-60 frames at 30 FPS (movie length: 00:00:02), recorded in 00:03:45 (0% of real-time speed).
-CPU time: 194.40 seconds (average: 3240.05 ms/frame)
-GPU time: 194.31 seconds (average: 3238.47 ms/frame)
+60 frames at 30 FPS (movie length: 00:00:02), recorded in 00:03:54 (0% of real-time speed).
+CPU time: 202.89 seconds (average: 3381.53 ms/frame)
+GPU time: 202.79 seconds (average: 3379.83 ms/frame)
 ----------------
 exit=0
 f.wav
