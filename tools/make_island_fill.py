@@ -143,60 +143,78 @@ def limit_slope(h, valid, cell, max_step=1.5, iters=80):
 
 
 def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
-               max_dist=6.0, max_step=3.0):
+               max_dist=30.0, max_step=4.0):
     """Квады по клеткам-дырам.
 
-    Клетка пропускается, если её высота восстановлена слишком далеко от меша
-    (dist > max_dist клеток) или перепад на клетке больше max_step её размеров:
-    из таких получаются вертикальные простыни и иглы.
+    Клетки, где высота восстановлена слишком далеко от меша (dist > max_dist),
+    пропускаем. На крутых местах (перепад на клетке больше max_step её
+    размеров) квад не выбрасываем, а прижимаем его вершины к нижнему углу:
+    получается пологий лоскут, а не вертикальная стена.
     """
+    gy, gx = np.gradient(h, cell)
+    limit = max_step * cell
+
     verts = np.zeros((nz * nx, 3), np.float32)
     uvs = np.zeros((nz * nx, 2), np.float32)
     for iz in range(nz):
-        z = z0 + iz * cell
         for ix in range(nx):
-            x = x0 + ix * cell
             k = iz * nx + ix
+            x = x0 + ix * cell
+            z = z0 + iz * cell
             verts[k] = (x, h[iz, ix] - SINK, z)
             uvs[k] = (x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
-    gy, gx = np.gradient(h, cell)
     normals = np.zeros_like(verts)
     normals[:, 0] = (-gx).reshape(-1)
     normals[:, 1] = 1.0
     normals[:, 2] = (-gy).reshape(-1)
     normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-9)
 
-    limit = max_step * cell
-    quads = []
+    extra_v, extra_u = [], []
+    tris = []
     skipped = 0
+    flattened = 0
     for iz in range(nz - 1):
         for ix in range(nx - 1):
             if not cells[iz, ix]:
                 continue
-            corners = [h[iz, ix], h[iz, ix + 1], h[iz + 1, ix], h[iz + 1, ix + 1]]
-            if max(corners) - min(corners) > limit:
+            idx = [iz * nx + ix, iz * nx + ix + 1, (iz + 1) * nx + ix, (iz + 1) * nx + ix + 1]
+            if dist is not None and max(dist.reshape(-1)[i] for i in idx) > max_dist:
                 skipped += 1
                 continue
-            if dist is not None:
-                d = [dist[iz, ix], dist[iz, ix + 1], dist[iz + 1, ix], dist[iz + 1, ix + 1]]
-                if max(d) > max_dist:
-                    skipped += 1
-                    continue
-            a = iz * nx + ix
-            quads.append((a, a + nx, a + 1, a + 1, a + nx, a + nx + 1))
-    if not quads:
+            ys = [verts[i][1] for i in idx]
+            if max(ys) - min(ys) > limit:
+                base = min(ys)
+                new_idx = []
+                for i in idx:
+                    v = verts[i].copy()
+                    if v[1] > base + limit:
+                        v[1] = base + limit
+                    extra_v.append(v)
+                    extra_u.append(uvs[i])
+                    new_idx.append(len(verts) + len(extra_v) - 1)
+                idx = new_idx
+                flattened += 1
+            a, b, c, d = idx
+            tris.append((a, b, c))
+            tris.append((b, d, c))
+    if not tris:
         print("  %-14s пусто" % name)
         return None
-    F = np.array(quads, np.uint32).reshape(-1, 3)
+    V = np.vstack([verts, np.array(extra_v, np.float32)]) if extra_v else verts
+    U = np.vstack([uvs, np.array(extra_u, np.float32)]) if extra_u else uvs
+    N = np.zeros_like(V)
+    N[:, 1] = 1.0
+    N[:len(normals)] = normals
+    F = np.array(tris, np.uint32)
     used = np.unique(F)
-    remap = np.full(len(verts), -1, np.int64)
+    remap = np.full(len(V), -1, np.int64)
     remap[used] = np.arange(len(used))
-    V, N, U = verts[used], normals[used], uvs[used]
-    F = remap[F]
-    print("  %-14s клеток %6d (пропущено крутых %4d), треугольников %6d"
-          % (name, len(quads), skipped, len(F)))
-    return {'attributes': {'POSITION': V, 'NORMAL': N, 'TEXCOORD_0': U},
-            'indices': F.reshape(-1)}
+    print("  %-14s квадов %6d (прижато крутых %4d, пропущено далёких %4d), треугольников %6d"
+          % (name, len(tris) // 2, flattened, skipped, len(F)))
+    return {'attributes': {'POSITION': V[used].astype(np.float32),
+                           'NORMAL': N[used].astype(np.float32),
+                           'TEXCOORD_0': U[used].astype(np.float32)},
+            'indices': remap[F].reshape(-1)}
 
 
 def main() -> int:
@@ -221,6 +239,11 @@ def main() -> int:
     inner_holes = dilate(~cov, INNER_DILATE)
     inner_cells = inner_holes[:res - 1, :res - 1]
     print("  дыр %d из %d клеток" % (int((~cov).sum()), cov.size))
+    # heightmap в дырах экстраполирован и местами врёт на десятки метров
+    # (перепад 47 м на одной клетке) — сглаживаем и ограничиваем уклон,
+    # иначе на месте дыры встаёт вертикальная стена
+    inner_h = smooth_holes(heights, cov, iters=40)
+    inner_h = limit_slope(inner_h, cov, hcell, max_step=1.0, iters=250)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
     ox0 = ax - OUTER_RADIUS
@@ -248,12 +271,12 @@ def main() -> int:
 
     g = glbw.GLB("IslandFill")
     prims = []
-    inner = build_mesh(inner_cells, heights, hcell, res, res, hx0, hz0,
-                       "fill_inner", max_dist=None, max_step=1e6)  # высоты из heightmap — не отбрасываем
+    inner = build_mesh(inner_cells, inner_h, hcell, res, res, hx0, hz0,
+                       "fill_inner", max_dist=None, max_step=4.0)
     if inner:
         prims.append(inner)
     outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
-                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=6.0)
+                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=3.0)
     if outer:
         prims.append(outer)
     if not prims:
