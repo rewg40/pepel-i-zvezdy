@@ -18,9 +18,9 @@
 
 Позиции не меняются: правим только буферы индексов и нормалей.
 
-Заодно убираем второй, нижний слой поверхности: в зоне heightmap 17 треугольников
-из 36 лежат на 10–45 м ниже настоящей земли. Сверху они выглядят чёрными
-плитами (дно/подложка), сквозь них не видно песка. Такие треугольники
+Заодно убираем второй, нижний слой поверхности: в зоне heightmap часть
+треугольников лежит на 10–45 м ниже настоящей земли. Сверху они выглядят
+чёрными плитами (дно/подложка), сквозь них не видно песка. Такие треугольники
 схлопываем в вырожденные (все индексы в одну вершину) — они перестают
 рисоваться, а дыры закрывает заплатка tools/make_island_fill.py.
 
@@ -102,20 +102,17 @@ def main() -> int:
 
     T = P[F]
     n = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0])
-    area = np.linalg.norm(n, axis=1)
     flipped = n[:, 1] < 0
     print("треугольников %d, из них с нормалью вниз %d (%.0f %%)"
           % (len(F), int(flipped.sum()), 100.0 * flipped.mean()))
     if check:
         return 0
+
     # 1. разворот обхода: у таких треугольников движок включает изнанку
     F[flipped] = F[flipped][:, [0, 2, 1]]
-    if not check:
-        raw = F.astype(iw).tobytes()
-        blob[idx_off:idx_off + len(raw)] = raw
     n[flipped] *= -1.0
 
-    # --- второй слой поверхности под землёй: схлопываем в вырожденные
+    # 2. нижний слой поверхности под землёй — схлопываем в вырожденные
     hm = json.load(open(HM_JSON))
     res = int(hm["res"])
     hx0, hz0, hcell = float(hm["x0"]), float(hm["z0"]), float(hm["cell"])
@@ -127,31 +124,14 @@ def main() -> int:
     ref = np.zeros(len(T))
     ref[inb] = H[iz[inb], ix[inb]]
     lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
-
-    print("скрыт нижний слой поверхности: %d треугольников из %d в зоне"
+    print("нижний слой поверхности: скрыто %d треугольников из %d в зоне"
           % (int(lower.sum()), int(inb.sum())))
+    F[lower] = F[lower][:, :1].repeat(3, axis=1)
 
-    # --- второй слой поверхности под землёй: схлопываем в вырожденные
-    hm = json.load(open(HM_JSON))
-    res = int(hm["res"])
-    hx0, hz0, hcell = float(hm["x0"]), float(hm["z0"]), float(hm["cell"])
-    H = np.fromfile(HM_F32, dtype="<f4").astype(np.float64).reshape(res, res)
-    c = T.mean(1)
-    ix = np.round((c[:, 0] - hx0) / hcell).astype(int)
-    iz = np.round((c[:, 2] - hz0) / hcell).astype(int)
-    inb = (ix >= 0) & (iz >= 0) & (ix < res) & (iz < res)
-    ref = np.zeros(len(T))
-    ref[inb] = H[iz[inb], ix[inb]]
-    lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
+    raw = F.astype(iw).tobytes()
+    blob[idx_off:idx_off + len(raw)] = raw
 
-    print("скрыт нижний слой поверхности: %d треугольников из %d в зоне"
-          % (int(lower.sum()), int(inb.sum())))
-
-    if not check and lower.any():
-        F[lower] = F[lower][:, :1].repeat(3, axis=1)
-        raw = F.astype(iw).tobytes()
-        blob[idx_off:idx_off + len(raw)] = raw
-
+    # 3. нормали по вершинам, взвешенные площадью
     VN = np.zeros_like(P)
     for k in range(3):
         np.add.at(VN, F[:, k], n)
