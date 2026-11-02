@@ -139,10 +139,9 @@ exit=0
 ![](ci/shots/03_zombie.png)
 ![](ci/shots/04_crawl.png)
 ![](ci/shots/05_debris.png)
+![](ci/shots/06_terrain_only.png)
+![](ci/shots/07_water_only.png)
 ```
-ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
-ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
-ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
 ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
 ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
 ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
@@ -163,6 +162,9 @@ shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
 игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.556, 1407.285, -77.76264)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
+материалы острова: { "Island": 1, "Ocean": 1, "Seafloor": 1, "Islet": 37, "Vegetation": 20 }
+shot 06_terrain_only (800, 450) -> /tmp/shots/06_terrain_only.png err=0
+shot 07_water_only (800, 450) -> /tmp/shots/07_water_only.png err=0
 готово
 exit=0
 ```
