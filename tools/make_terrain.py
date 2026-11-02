@@ -1,39 +1,44 @@
 #!/usr/bin/env python3
-"""Собрать терраин острова из карты высот → game/models/island_terrain.glb.
+"""Собрать терраин острова из ИСХОДНОГО меша → game/models/island_terrain.glb.
 
-Исходный меш island.glb после децимации непригоден для ближнего плана: половина
-треугольников была вывернута, есть дыры (13.8 % площади у арены), наложенные
-слои поверхности и треугольники размером в километр — у арены они «просвечивают»
-сквозь любые заплатки и дают светлые плиты на песке.
+Почему не из game/models/island.glb: там остров уже децимирован, и децимация
+оставила у арены плоскости размером в километр. Карта высот по такому мешу —
+это несколько гигантских наклонных плоскостей с обрывами в десятки метров,
+поэтому в игре на земле появлялись ступени и светлые «плиты», а между ними
+чёрные провалы. Исходный меш (остров/2 остров улучшенный.zip) состоит из
+плоских фасеток ~30-40 м — это и есть вид модели, и по нему высоты читаются
+ровно.
 
-Поэтому терраин рисуется заново по высотам:
+Терраин собирается так:
 
-* у арены — сетка 1 м по heightmap.f32 (она же коллизия, ровно то, по чему
-  ходит игрок);
-* остальной остров — сетка 12 м по верхней огибающей меша (максимум плоскости
-  треугольников), с гармонической заливкой дыр.
-
-UV берутся по той же аффинной развёртке, что у island.glb
-(u = x·5e-5 + 0.499974, v = z·7e-5 + 0.505151), поэтому цвета атласа на месте:
-песок в центре, зелень по краям.
+* ближний план (площадка арены 220×220 м) — сетка 1 м по высотам исходного
+  меша; эта же карта пишется в game/models/heightmap.f32 и используется
+  для коллизии, поэтому игрок ходит ровно по нарисованному;
+* остальной остров — сетка 24 м по верхней огибающей исходного меша, с
+  гармонической заливкой дыр;
+* нормали считаются по полю высот (свет ложится как на модели);
+* UV — та же аффинная развёртка, что у исходного меша, поэтому рис багета
+  (атлас с бежевыми разводами) совпадает с текстурой модели.
 
     python3 tools/make_terrain.py        # → game/models/island_terrain.glb
 """
 import json
 import os
-import sys
+import struct
+import zipfile
+import zlib
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import glb_io  # noqa: E402
-import glbw  # noqa: E402
-from make_island_fill import (  # noqa: E402
-    local_surface, neighbours, raster, shift,
-)
+import glb_io
+import glbw
+from make_island_fill import raster, shift
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLB = os.path.join(ROOT, "game", "models", "island.glb")
+ARCHIVE = [os.path.join(ROOT, "остров", "2 остров улучшенный.z01"),
+           os.path.join(ROOT, "остров", "2 остров улучшенный.z02"),
+           os.path.join(ROOT, "остров", "2 остров улучшенный.zip")]
+SRC_CACHE = "/tmp/island_src.glb"
 HM_JSON = os.path.join(ROOT, "game", "models", "heightmap.json")
 HM_F32 = os.path.join(ROOT, "game", "models", "heightmap.f32")
 OUT = os.path.join(ROOT, "game", "models", "island_terrain.glb")
@@ -42,18 +47,40 @@ UV_U_PER_M, UV_U_OFFSET = 5.0e-5, 0.499974
 UV_V_PER_M, UV_V_OFFSET = 7.0e-5, 0.505151
 
 COARSE_CELL = 24.0      # м, дальний план
-# Терраин острова лежит на высоте ~1400 м, а Ocean/Seafloor в исходной модели
-# висят на y=0 — в 1.4 км ниже, поэтому в игре «моря» не видно. За уровень воды
-# берём отметку ниже самого нижнего края суши вокруг арены.
-SEA_LEVEL = 1330.0      # м, всё ниже — вода
-MIN_LAND = 2.0          # м над водой: ниже не строим, чтобы не лезть под воду
-BLEND_METERS = 30.0     # плавный переход ближней сетки в дальнюю
+SEA_LEVEL = 0.0         # м, уровень воды исходной модели (Ocean стоит на y=0)
+BLEND_METERS = 96.0     # плавный переход ближней сетки в дальнюю
+FINE_FILL_ITERS = 800
+
+
+def extract_source(dst=SRC_CACHE):
+    """Склеить части zip и распаковать единственный glb внутрь (unzip не умеет
+    многотомные архивы, а нам нужен только один поток deflate)."""
+    if os.path.exists(dst) and os.path.getsize(dst) > 1e8:
+        return dst
+    data = b"".join(open(p, "rb").read() for p in ARCHIVE)
+    i = data.find(b"PK\x03\x04")
+    if i < 0:
+        raise SystemExit("не нашли локальный заголовок zip")
+    _, _, _, method, _, _, _, _, _, nl, el = struct.unpack("<IHHHHHIIIHH", data[i:i + 30])
+    if method != 8:
+        raise SystemExit("ожидали deflate, а там метод %d" % method)
+    dec = zlib.decompressobj(-15)
+    out = bytearray()
+    p = i + 30 + nl + el
+    while p < len(data) and not dec.eof:
+        chunk = data[p:p + (1 << 22)]
+        out += dec.decompress(chunk)
+        p += len(chunk)
+    out += dec.flush()
+    open(dst, "wb").write(out)
+    print("исходный остров: %s (%.0f МБ)" % (dst, len(out) / 1e6))
+    return dst
 
 
 def harmonic_fill(h, valid, iters=2000, tol=1e-3):
     h = h.copy()
     for _ in range(iters):
-        nb = sum(neighbours(h)) * 0.25
+        nb = (shift(h, -1, 0) + shift(h, 1, 0) + shift(h, 0, -1) + shift(h, 0, 1)) * 0.25
         new = np.where(valid, h, nb)
         delta = float(np.abs(new - h).max())
         h = new
@@ -62,14 +89,17 @@ def harmonic_fill(h, valid, iters=2000, tol=1e-3):
     return h
 
 
-def limit_slope(h, valid, cell, max_step=1.0, iters=200):
-    h = h.copy()
-    lim = max_step * cell
-    for _ in range(iters):
-        nb = neighbours(h)
-        h = np.where(valid, h, np.clip(h, np.minimum.reduce(nb) - lim,
-                                       np.maximum.reduce(nb) + lim))
-    return h
+def grid_normals(h, cell):
+    """Нормали по полю высот: центральные разности."""
+    dhx = np.zeros_like(h)
+    dhz = np.zeros_like(h)
+    dhx[:, 1:-1] = (h[:, 2:] - h[:, :-2]) / (2 * cell)
+    dhz[1:-1, :] = (h[2:, :] - h[:-2, :]) / (2 * cell)
+    dhx[:, 0], dhx[:, -1] = dhx[:, 1], dhx[:, -2]
+    dhz[0, :], dhz[-1, :] = dhz[1, :], dhz[-2, :]
+    N = np.stack([-dhx.ravel(), np.ones(h.size), -dhz.ravel()], axis=1)
+    N /= np.linalg.norm(N, axis=1, keepdims=True)
+    return N.astype(np.float32)
 
 
 def grid_mesh(cells, h, cell, nx, nz, x0, z0, name):
@@ -80,8 +110,7 @@ def grid_mesh(cells, h, cell, nx, nz, x0, z0, name):
     V = np.stack([X.ravel(), h.ravel(), Z.ravel()], axis=1).astype(np.float32)
     U = np.stack([(X * UV_U_PER_M + UV_U_OFFSET).ravel(),
                   (Z * UV_V_PER_M + UV_V_OFFSET).ravel()], axis=1).astype(np.float32)
-    N = np.zeros_like(V)
-    N[:, 1] = 1.0
+    N = grid_normals(h, cell)
 
     quads = []
     for iz in range(nz - 1):
@@ -107,10 +136,12 @@ def grid_mesh(cells, h, cell, nx, nz, x0, z0, name):
 
 
 def main() -> int:
-    js, blob = glb_io.load_glb(GLB)
+    src = extract_source()
+    js, blob = glb_io.load_glb(src)
     pr = js["meshes"][0]["primitives"][0]
     P = glb_io.accessor(js, blob, pr["attributes"]["POSITION"]).astype(np.float64)
     I = glb_io.accessor(js, blob, pr["indices"]).reshape(-1, 3).astype(np.int64)
+    print("исходный терраин: %d вершин, %d треугольников" % (len(P), len(I)))
 
     hm = json.load(open(HM_JSON))
     res = int(hm["res"])
@@ -118,73 +149,72 @@ def main() -> int:
     hx0, hz0 = float(hm["x0"]), float(hm["z0"])
     hx1 = hx0 + (res - 1) * hcell
     hz1 = hz0 + (res - 1) * hcell
-    fine = np.fromfile(HM_F32, dtype="<f4").astype(np.float64).reshape(res, res)
 
-    # --- дальний план: верхняя огибающая меша на сетке 12 м
-    x0, z0 = P[:, 0].min(), P[:, 2].min()
-    nx = int((P[:, 0].max() - x0) / COARSE_CELL) + 1
-    nz = int((P[:, 2].max() - z0) / COARSE_CELL) + 1
+    # --- ближний план: 1 м по высотам исходного меша (он же коллизия)
+    cov, fine = raster(P, I, hx0, hz0, hcell, res, res)
+    if not cov.all():
+        print("  дыр в ближней карте: %d клеток" % int((~cov).sum()))
+        seed = float(np.median(fine[cov]))
+        fine = harmonic_fill(np.where(cov, fine, seed), cov, iters=FINE_FILL_ITERS)
+    else:
+        fine = np.where(cov, fine, SEA_LEVEL)
+    fine = np.maximum(fine, SEA_LEVEL)
+    fine.astype("<f4").tofile(HM_F32)
+    print("  карта высот %d×%d по %.1f м: y %.1f…%.1f → %s"
+          % (res, res, hcell, fine.min(), fine.max(), os.path.basename(HM_F32)))
+
+    # --- дальний план: 24 м по верхней огибающей исходного меша
+    x0 = np.floor(P[:, 0].min() / COARSE_CELL) * COARSE_CELL
+    z0 = np.floor(P[:, 2].min() / COARSE_CELL) * COARSE_CELL
+    nx = int(np.ceil((P[:, 0].max() - x0) / COARSE_CELL)) + 1
+    nz = int(np.ceil((P[:, 2].max() - z0) / COARSE_CELL)) + 1
     print("дальний план: сетка %d×%d по %.0f м" % (nx, nz, COARSE_CELL))
-    cov, hmax = raster(P, I, x0, z0, COARSE_CELL, nx, nz)
-    valid = cov
-    h = np.where(valid, hmax, np.nan)
-    init = np.where(valid, hmax, float(np.median(hmax[valid])))
-    h = harmonic_fill(init, valid, iters=1500)
-    h = limit_slope(h, valid, COARSE_CELL, max_step=0.35)
-    # крышки над провалами: всё, что заметно ниже локальной поверхности
-    surf = local_surface(h, valid, win=5)
-    pits = valid & (h < surf - 8.0)
-    h = np.where(pits, surf - 0.2, h)
+    valid, hmax = raster(P, I, x0, z0, COARSE_CELL, nx, nz)
+    h = harmonic_fill(np.where(valid, hmax, SEA_LEVEL), valid, iters=1500)
 
-    # Децимированные треугольники шириной в километр дают над ареной завышенные
-    # высоты (до +50 м): оставлять их на сетке 24 м нельзя — на краю площадки
-    # получается стена. Внутри площадки высоты берём из ближней сетки (ниже),
-    # а узлы грубой сетки там заполняем от внешней границы.
+    # --- узлы грубой сетки внутри площадки берём из ближней карты и плавно
+    #     переходим к дальнему плану за BLEND_METERS от её края
     gx = x0 + np.arange(nx) * COARSE_CELL
     gz = z0 + np.arange(nz) * COARSE_CELL
-    node_inside = ((gx[None, :] >= hx0) & (gx[None, :] <= hx1)
-                   & (gz[:, None] >= hz0) & (gz[:, None] <= hz1))
-    if node_inside.any():
-        outside = valid & ~node_inside
-        seed = float(np.median(h[outside])) if outside.any() else float(np.median(h[valid]))
-        h_pad = harmonic_fill(np.where(outside, h, seed), outside, iters=3000)
-        h = np.where(node_inside, h_pad, h)
+    GX, GZ = np.meshgrid(gx, gz)
+    cx = np.clip(GX, hx0, hx1)
+    cz = np.clip(GZ, hz0, hz1)
+    fx = np.clip((cx - hx0) / hcell, 0, res - 1.0001)
+    fz = np.clip((cz - hz0) / hcell, 0, res - 1.0001)
+    ix, iz = np.floor(fx).astype(int), np.floor(fz).astype(int)
+    tx, tz = fx - ix, fz - iz
+    near_h = (fine[iz, ix] * (1 - tx) * (1 - tz) + fine[iz, ix + 1] * tx * (1 - tz)
+              + fine[iz + 1, ix] * (1 - tx) * tz + fine[iz + 1, ix + 1] * tx * tz)
+    dx = np.maximum(np.maximum(hx0 - GX, GX - hx1), 0)
+    dz = np.maximum(np.maximum(hz0 - GZ, GZ - hz1), 0)
+    dist = np.hypot(dx, dz)
+    w = np.clip(1.0 - dist / BLEND_METERS, 0.0, 1.0) ** 2
+    h = near_h * w + h * (1.0 - w)
 
-    inside_fine = ((x0 + np.arange(nx) * COARSE_CELL)[None, :] >= hx0) & \
-                  ((x0 + np.arange(nx) * COARSE_CELL)[None, :] <= hx1) & \
-                  ((z0 + np.arange(nz) * COARSE_CELL)[:, None] >= hz0) & \
-                  ((z0 + np.arange(nz) * COARSE_CELL)[:, None] <= hz1)
-    # Рисуем всю покрытую мешем сушу, а высоты не опускаем ниже уровня воды:
-    # тогда край острова уходит под воду плавно, а не обрывается стенкой,
-    # сквозь которую видно пустоту.
     h = np.maximum(h, SEA_LEVEL)
-    coarse_cells = valid & ~inside_fine
-    print("  суша: %d клеток, рисуем %d" % (int((h > SEA_LEVEL).sum()),
-                                            int(coarse_cells.sum())))
+    inside = dist <= 0.0
+    coarse_cells = valid & ~inside
+    print("  суша: %d клеток, рисуем %d" % (int(valid.sum()), int(coarse_cells.sum())))
 
-    # --- ближний план: сетка 1 м по карте высот
-    # На краю площадки высоты плавно (BLEND_METERS) переходят в дальний план:
-    # иначе между сеткой 1 м и сеткой 24 м встаёт стена в десятки метров.
-    fine_cells = np.ones((res - 1, res - 1), bool)
-    print("ближний план: площадка %.0f×%.0f м" % (hx1 - hx0, hz1 - hz0))
-
-    def coarse_at(x, z):
-        ix = np.clip(np.round((x - x0) / COARSE_CELL).astype(int), 0, nx - 1)
-        iz = np.clip(np.round((z - z0) / COARSE_CELL).astype(int), 0, nz - 1)
-        return h[iz, ix]
-
-    fx = hx0 + np.arange(res)[None, :] * hcell
-    fz = hz0 + np.arange(res)[:, None] * hcell
-    d_edge = np.minimum(np.minimum(fx - hx0, hx1 - fx), np.minimum(fz - hz0, hz1 - fz))
-    w = np.clip(1.0 - d_edge / BLEND_METERS, 0.0, 1.0) ** 2
-    fine = fine * (1.0 - w) + coarse_at(np.broadcast_to(fx, fine.shape),
-                                        np.broadcast_to(fz, fine.shape)) * w
+    # --- ближняя сетка у самого края тоже подтягиваем к дальнему плану,
+    #     чтобы на стыке не было щели
+    fxg = hx0 + np.arange(res)[None, :] * hcell
+    fzg = hz0 + np.arange(res)[:, None] * hcell
+    d_edge = np.minimum(np.minimum(fxg - hx0, hx1 - fxg),
+                        np.minimum(fzg - hz0, hz1 - fzg))
+    we = np.clip(1.0 - d_edge / (hcell * 2.0), 0.0, 1.0)
+    cix = np.clip(np.round((np.broadcast_to(fxg, fine.shape) - x0) / COARSE_CELL),
+                  0, nx - 1).astype(int)
+    ciz = np.clip(np.round((np.broadcast_to(fzg, fine.shape) - z0) / COARSE_CELL),
+                  0, nz - 1).astype(int)
+    fine = fine * (1.0 - we) + h[ciz, cix] * we
 
     g = glbw.GLB("IslandTerrain")
     prims = []
     for name, cells, heights, cell, cnx, cnz, cx0, cz0 in (
             ("terrain_far", coarse_cells, h, COARSE_CELL, nx, nz, x0, z0),
-            ("terrain_near", fine_cells, fine, hcell, res, res, hx0, hz0)):
+            ("terrain_near", np.ones((res - 1, res - 1), bool), fine, hcell, res, res,
+             hx0, hz0)):
         prim = grid_mesh(cells, heights, cell, cnx, cnz, cx0, cz0, name)
         if prim:
             prims.append(prim)

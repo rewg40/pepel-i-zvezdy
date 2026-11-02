@@ -94,7 +94,6 @@ func _spawn_island() -> void:
 	add_child(island)
 	_fix_island_materials(island)
 	_spawn_terrain()
-	_raise_water()
 	_make_heightmap_collision()
 
 
@@ -230,26 +229,6 @@ func _spawn_terrain() -> void:
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		n += 1
 	print("терраин: ", n, " мешей по картам высот")
-
-
-## Море и дно в исходной модели висят на y = 0, а остров — на ~1400 м,
-## то есть «вода» оказывалась в 1.4 км ниже земли. Поднимаем её к острову.
-const WATER_LEVEL := 1330.0
-
-
-func _raise_water() -> void:
-	var island := get_node_or_null("Island")
-	if island == null:
-		return
-	for mi in island.find_children("*", "MeshInstance3D", true, false):
-		var m := mi as MeshInstance3D
-		if m.mesh == null:
-			continue
-		var mat := m.mesh.surface_get_material(0)
-		var nm := "" if mat == null else String(mat.resource_name)
-		if nm == "Ocean" or nm == "Seafloor":
-			m.global_position.y += WATER_LEVEL
-			m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).
