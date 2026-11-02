@@ -102,11 +102,11 @@ PASS  остров: земля на родном атласе 4096px
 PASS  остров: земля на шейдере ground.gdshader
 PASS  шейдер земли получает атлас
 PASS  шейдер земли получает зерно
-PASS  терраин по картам высот: треугольников 666816
+PASS  терраин по картам высот: треугольников 668266
 PASS  терраин рисуется шейдером земли (атлас + зерно)
 PASS  исходный меш терраина скрыт
 PASS  карта высот загружена в float32 (высота в метрах)
-PASS  высота арены из карты (1405.00) совпадает с arena.json (1405.00)
+PASS  высота арены из карты (1404.94) совпадает с arena.json (1405.00)
 PASS  игрок: скелет и AnimationPlayer
 PASS  игрок играет клип «MxIdle»
 PASS  меч прицеплен к кисти
@@ -160,8 +160,8 @@ WARNING: All audio drivers failed, falling back to the dummy driver.
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
 shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
 shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
-зомби-ползун: body y=1405.20 model y=0.00 lowest bone=Hand_R y=1405.58 lowest mesh y=1404.54 on_floor=true
-игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.558, 1407.285, -77.75944)
+зомби-ползун: body y=1405.15 model y=0.00 lowest bone=Hand_R y=1405.52 lowest mesh y=1404.49 on_floor=true
+игрок y=1404.14 pos=(1309.365, 1404.141, -69.25084), камера=(1311.559, 1407.23, -77.76073)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
 shot 08_only_ocean (800, 450) -> /tmp/shots/08_only_ocean.png err=0
