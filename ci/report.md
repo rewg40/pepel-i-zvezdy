@@ -89,7 +89,7 @@ PASS  zombie.glb «Walk»: 22 дорожек, битых 0, длина 1.20 с
 PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.20 с
 
 === главная сцена
-остров: тайлинг текстуры включён для 1 поверхностей
+остров: плитка земли (8 м) на 1 поверхностях, вершинные цвета для растительности включены
 PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
   бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
 PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
@@ -142,7 +142,7 @@ ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
 WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
 
-остров: тайлинг текстуры включён для 1 поверхностей
+остров: плитка земли (8 м) на 1 поверхностях, вершинные цвета для растительности включены
 внешние клипы: +7 из res://models/medic_clips.glb
 внешние клипы: +7 из res://models/zombie_clips.glb
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
