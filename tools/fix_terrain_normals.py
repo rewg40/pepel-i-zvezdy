@@ -137,8 +137,14 @@ def main() -> int:
         np.add.at(VN, F[:, k], n)
     ln = np.linalg.norm(VN, axis=1, keepdims=True)
     VN = VN / np.maximum(ln, 1e-12)
-    print("нормали пересчитаны: доля с ny>0.5 — %.0f %%"
-          % (100.0 * (VN[:, 1] > 0.5).mean()))
+    # В местах, где поверхность сходится с почти вертикальными стенками
+    # (каньоны, обрывы), средняя нормаль ложится на бок, и треугольник
+    # рисуется чёрным. Подмешиваем «вверх» — рельеф остаётся объёмным, но
+    # никакая земля не освещается с изнанки.
+    VN = VN + np.array([0.0, 1.2, 0.0])
+    VN = VN / np.maximum(np.linalg.norm(VN, axis=1, keepdims=True), 1e-12)
+    print("нормали пересчитаны: доля с ny>0.5 — %.0f %%, ny<0.2 — %.1f %%"
+          % (100.0 * (VN[:, 1] > 0.5).mean(), 100.0 * (VN[:, 1] < 0.2).mean()))
     blob[nrm_off:nrm_off + count * 12] = VN.astype(np.float32).tobytes()
     write_glb(GLB, js, blob)
     print("записан", GLB)
