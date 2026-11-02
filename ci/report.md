@@ -99,17 +99,21 @@ PASS  остров на сцене: узлов-мешей 60
 PASS  игрок: скелет и AnimationPlayer
 PASS  игрок играет клип «MxIdle»
 PASS  меч прицеплен к кисти
+PASS  игрок бьёт клипом MxAttack
+PASS  длительность удара = длине клипа (2.40 / 2.40 с)
+PASS  момент попадания внутри клипа (1.32 с)
 PASS  зомби: тело 1000 HP (1000)
 PASS  зомби: рука 3 HP
 PASS  зомби: arm_l отрублена после 3 ударов
 PASS  зомби: leg_l отрублена после 3 ударов
 PASS  зомби: leg_r отрублена после 3 ударов
 PASS  зомби: без двух ног состояние «crawl»
+PASS  зомби: клип без рук найден (WalkNoArms)
 PASS  зомби: играет «MxCrawl»
 PASS  куски конечностей на земле: 3
 PASS  зомби: тело держит удар (осталось 966 HP)
 
-=== итог: 72 проверок, 0 провалов
+=== итог: 76 проверок, 0 провалов
 WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
