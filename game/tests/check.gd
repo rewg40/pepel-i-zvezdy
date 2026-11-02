@@ -176,7 +176,7 @@ func _run() -> void:
 				fill_tris += mi.mesh.get_faces().size() / 3
 			if not (mi.material_override is ShaderMaterial):
 				fill_ok_mat = false
-	ok(fill != null and fill_tris > 5000,
+	ok(fill != null and fill_tris > 20000,
 		"заплатки земли в дырах острова: треугольников %d" % fill_tris)
 	ok(fill_ok_mat, "заплатки рисуются шейдером земли (атлас + зерно)")
 	var hm: Dictionary = scene.get("_hm")

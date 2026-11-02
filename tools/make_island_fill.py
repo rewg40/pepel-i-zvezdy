@@ -49,9 +49,10 @@ def raster(P, I, x0, z0, cell, nx, nz):
     hmax = np.full((nz, nx), -1e9)
     xs = x0 + (np.arange(nx) + 0.5) * cell
     zs = z0 + (np.arange(nz) + 0.5) * cell
-    for t in P[I]:
-        if t[:, 1].max() < 0.0:
-            continue
+    a2 = np.linalg.norm(np.cross(P[I][:, 1] - P[I][:, 0], P[I][:, 2] - P[I][:, 0]), axis=1)
+    for t, area in zip(P[I], a2 * 0.5):
+        if area < 1.0 or t[:, 1].max() < 0.0:
+            continue          # вырожденные/скрытые треугольники и вода
         ix0 = max(int((t[:, 0].min() - x0) / cell) - 1, 0)
         ix1 = min(int((t[:, 0].max() - x0) / cell) + 2, nx)
         iz0 = max(int((t[:, 2].min() - z0) / cell) - 1, 0)
@@ -133,6 +134,16 @@ def local_surface(h, valid, win=7):
     return np.where(np.isnan(med), h, med)
 
 
+def shift(a, dy, dx):
+    """Сдвиг массива с повтором краёв (np.roll заворачивает и портит границы)."""
+    pad = np.pad(a, ((1, 1), (1, 1)), mode="edge")
+    return pad[1 + dy:1 + dy + a.shape[0], 1 + dx:1 + dx + a.shape[1]]
+
+
+def neighbours(a):
+    return [shift(a, -1, 0), shift(a, 1, 0), shift(a, 0, -1), shift(a, 0, 1)]
+
+
 def limit_slope(h, valid, cell, max_step=1.0, iters=200):
     """Ограничиваем перепад между соседними клетками дыры.
 
@@ -143,7 +154,7 @@ def limit_slope(h, valid, cell, max_step=1.0, iters=200):
     h = h.copy()
     lim = max_step * cell
     for _ in range(iters):
-        nb = [np.roll(h, 1, 0), np.roll(h, -1, 0), np.roll(h, 1, 1), np.roll(h, -1, 1)]
+        nb = neighbours(h)
         mn = np.minimum.reduce(nb)
         mx = np.maximum.reduce(nb)
         h = np.where(valid, h, np.clip(h, mn - lim, mx + lim))
@@ -160,8 +171,7 @@ def harmonic_fill(h, valid, iters=2000, tol=1e-3):
     """
     h = h.copy()
     for i in range(iters):
-        nb = (np.roll(h, 1, 0) + np.roll(h, -1, 0)
-              + np.roll(h, 1, 1) + np.roll(h, -1, 1)) * 0.25
+        nb = sum(neighbours(h)) * 0.25
         new = np.where(valid, h, nb)
         delta = float(np.abs(new - h).max())
         h = new
@@ -270,14 +280,16 @@ def main() -> int:
     # сквозь неё просвечивает тёмное дно. Считаем такие клетки дырами.
     cov = cov & (np.abs(hmax - heights) < 3.0)
     print("  покрытие 1 м: %d клеток" % int(cov.sum()))
-    inner_holes = dilate(~cov, INNER_DILATE)
+    inner_holes = np.ones_like(cov)          # вся площадка
     inner_cells = inner_holes[:res - 1, :res - 1]
     print("  дыр %d из %d клеток" % (int((~cov).sum()), cov.size))
     # heightmap в дырах экстраполирован и местами врёт на десятки метров
     # (перепад 47 м на одной клетке) — сглаживаем и ограничиваем уклон,
     # иначе на месте дыры встаёт вертикальная стена
-    inner_h = harmonic_fill(np.where(cov, heights, 0.0), cov, iters=2000)
-    inner_h = limit_slope(inner_h, cov, hcell, max_step=0.8)
+    # высоты берём из самого меша (hmax), а не из карты высот: в дырах карта
+    # экстраполирована и расходится с мешем на десятки метров
+    inner_h = harmonic_fill(heights, cov, iters=2000)
+    inner_h = limit_slope(inner_h, cov, hcell, max_step=0.5)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
     ox0 = ax - OUTER_RADIUS
@@ -292,7 +304,7 @@ def main() -> int:
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
     h_filled = harmonic_fill(h_filled, cov_o, iters=2000)
-    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.8)
+    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.35)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
@@ -310,11 +322,11 @@ def main() -> int:
     g = glbw.GLB("IslandFill")
     prims = []
     inner = build_mesh(inner_cells, inner_h, hcell, res, res, hx0, hz0,
-                       "fill_inner", max_dist=None, max_step=4.0)
+                       "fill_inner", max_dist=None, max_step=1e6)
     if inner:
         prims.append(inner)
     outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
-                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=3.0)
+                       "fill_outer", dist=fill_dist, max_dist=30.0, max_step=1e6)
     if outer:
         prims.append(outer)
     if not prims:

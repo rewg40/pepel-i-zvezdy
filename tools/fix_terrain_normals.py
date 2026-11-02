@@ -127,7 +127,12 @@ def main() -> int:
     ref = np.zeros(len(T))
     ref[inb] = H[iz[inb], ix[inb]]
     lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
-    print("нижний слой поверхности: %d треугольников из %d в зоне heightmap"
+    # внутри площадки арены меш заменяется чистой сеткой по карте высот
+    # (tools/make_island_fill.py) — иначе пятна и дыры под ногами не убрать
+    in_site = (c[:, 0] > hx0) & (c[:, 0] < hx0 + (res - 1) * hcell) \
+        & (c[:, 2] > hz0) & (c[:, 2] < hz0 + (res - 1) * hcell)
+    lower |= in_site
+    print("скрыто треугольников (нижний слой + площадка арены): %d из %d в зоне"
           % (int(lower.sum()), int(inb.sum())))
     if not check and lower.any():
         F[lower] = F[lower][:, :1].repeat(3, axis=1)
