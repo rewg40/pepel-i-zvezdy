@@ -99,11 +99,13 @@ func _spawn_island() -> void:
 
 ## Материалы острова. Земля рисуется родным атласом island.glb (4096²,
 ## ~5 м на тексель) через свой шейдер: атлас даёт настоящую раскладку биомов,
-## а мелкое зерно detail возвращает фактуру вблизи (shaders/ground.gdshader).
+## а мелкое зерно detail и родные разводы mottle возвращают фактуру вблизи
+## (shaders/ground.gdshader).
 ## Растительность и островки раскрашены вершинными цветами — их надо включить,
 ## иначе они белые плоские треугольники.
 const GROUND_SHADER := "res://shaders/ground.gdshader"
 const GROUND_DETAIL := "res://models/ground_detail.png"
+const GROUND_MOTTLE := "res://models/ground_mottle.png"
 
 var _ground_mat: Material = null
 
@@ -171,6 +173,10 @@ func _make_ground_material(atlas: Texture2D) -> Material:
 	mat.set_shader_parameter("atlas", atlas)
 	if ResourceLoader.exists(GROUND_DETAIL):
 		mat.set_shader_parameter("detail", load(GROUND_DETAIL))
+	if ResourceLoader.exists(GROUND_MOTTLE):
+		mat.set_shader_parameter("mottle", load(GROUND_MOTTLE))
+	else:
+		mat.set_shader_parameter("mottle_strength", 0.0)
 	return mat
 
 

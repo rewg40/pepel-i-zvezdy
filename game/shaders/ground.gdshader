@@ -16,6 +16,12 @@ uniform vec2 atlas_u = vec2(0.00005, 0.499974);   // u = x * u.x + u.y
 uniform vec2 atlas_v = vec2(0.00007, 0.505151);   // v = z * v.x + v.y
 uniform float detail_scale = 0.11;                // ~1 повтор на 9 м
 uniform float detail_strength = 0.45;
+// mottle — бежевые разводы из того же атласа (tools/make_ground_mottle.py):
+// атлас даёт ~5 м на тексель, поэтому у ног игрока он мылит; плитка повторяет
+// родные пятна каждые ~320 м и возвращает характер модели
+uniform sampler2D mottle : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float mottle_scale = 0.003125;            // ~1 повтор на 320 м
+uniform float mottle_strength = 0.85;
 
 varying vec3 world_pos;
 
@@ -28,8 +34,10 @@ void fragment() {
 		world_pos.x * atlas_u.x + atlas_u.y,
 		world_pos.z * atlas_v.x + atlas_v.y);
 	vec3 base = texture(atlas, atlas_uv).rgb;
+	vec3 stains = texture(mottle, world_pos.xz * mottle_scale).rgb;
 	float grain = texture(detail, world_pos.xz * detail_scale).r;
-	ALBEDO = base * mix(1.0, grain * 1.9, detail_strength);
+	ALBEDO = base * mix(vec3(1.0), stains, mottle_strength)
+		* mix(1.0, grain * 1.9, detail_strength);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.2;
 }
