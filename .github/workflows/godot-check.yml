@@ -11,13 +11,13 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install Godot 4.3
+      - name: Install Godot and software GL
         run: |
           set -e
           curl -sSL -o /tmp/godot.zip \
@@ -26,6 +26,9 @@ jobs:
           mv /tmp/godot/Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
           chmod +x /usr/local/bin/godot
           godot --version || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri mesa-utils >/dev/null 2>&1 || true
+          xvfb-run -a glxinfo -B 2>/dev/null | head -5 || echo "(нет glxinfo)"
 
       - name: Import project
         run: |
@@ -55,43 +58,22 @@ jobs:
           echo "exit=$?" >> /tmp/check.log
           cat /tmp/check.log
 
-      - name: Render frames (software)
-        continue-on-error: true
-        run: |
-          set +e
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null 2>&1
-          mkdir -p /tmp/movie
-          timeout 900 xvfb-run -a godot --path game --resolution 640x360 \
-            --rendering-driver opengl3 --fixed-fps 30 \
-            --write-movie /tmp/movie/f.png --quit-after 60 > /tmp/render.log 2>&1
-          echo "exit=$?" >> /tmp/render.log
-          ls /tmp/movie | head -5 >> /tmp/render.log
-          tail -20 /tmp/render.log
-          mkdir -p ci
-          i=0
-          for f in $(ls /tmp/movie/*.png 2>/dev/null | awk 'NR==2 || NR==20 || NR==50'); do
-            i=$((i+1))
-            cp "$f" "ci/frame_$i.png"
-          done
-          ls -l ci || true
-
       - name: Screenshots
         continue-on-error: true
         run: |
           set +e
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb libgl1-mesa-dri >/dev/null 2>&1
-          timeout 900 xvfb-run -a godot --path game --resolution 800x450 \
+          mkdir -p /tmp/shots
+          SHOT_DIR=/tmp/shots timeout 900 xvfb-run -a godot --path game --resolution 800x450 \
             --rendering-driver opengl3 --script res://tests/shots.gd > /tmp/shots.log 2>&1
           echo "exit=$?" >> /tmp/shots.log
-          tail -20 /tmp/shots.log
-          ls -l game/ci/shots 2>/dev/null || ls -l ci/shots 2>/dev/null || true
+          tail -25 /tmp/shots.log
+          ls -l /tmp/shots
 
-      - name: Render frames (software)
+      - name: Build report
         if: always()
         run: |
-          mkdir -p ci
+          mkdir -p ci/shots
+          cp /tmp/shots/*.png ci/shots/ 2>/dev/null || true
           {
             echo "# Проверка движком"
             echo
@@ -109,14 +91,11 @@ jobs:
             echo '```'
             cat /tmp/check.log 2>/dev/null
             echo '```'
-            echo '## Кадры из движка (software OpenGL)'
+            echo '## Скриншоты из движка (llvmpipe / OpenGL 3)'
             echo
-            if ls ci/shots/*.png >/dev/null 2>&1; then
-              for f in ci/shots/*.png; do echo "![]($f)"; done
-            fi
-            for f in ci/frame_*.png; do [ -f "$f" ] && echo "![]($f)"; done
+            for f in ci/shots/*.png; do [ -f "$f" ] && echo "![]($f)"; done
             echo '```'
-            tail -12 /tmp/render.log 2>/dev/null || echo "(рендера не было)"
+            tail -25 /tmp/shots.log 2>/dev/null || echo "(скриншотов нет)"
             echo '```'
           } > ci/report.md
           git config user.name "godot-check"
@@ -128,13 +107,10 @@ jobs:
       - name: Fail on errors
         if: always()
         run: |
-          if grep -q "FAIL " /tmp/check.log 2>/dev/null; then
-            echo "есть проваленные проверки"; exit 1
-          fi
-          if grep -qE "SCRIPT ERROR|Parse Error" /tmp/check.log /tmp/parse.log 2>/dev/null; then
+          test -f /tmp/check.log || { echo "тест не запускался"; exit 1; }
+          if grep -q "FAIL " /tmp/check.log; then echo "есть проваленные проверки"; exit 1; fi
+          if grep -qE "SCRIPT ERROR|Parse Error" /tmp/check.log /tmp/parse.log; then
             echo "есть ошибки скриптов"; exit 1
           fi
-          if ! grep -q "итог" /tmp/check.log 2>/dev/null; then
-            echo "тест не дошёл до конца"; exit 1
-          fi
+          grep -q "итог" /tmp/check.log || { echo "тест не дошёл до конца"; exit 1; }
           echo "всё чисто"

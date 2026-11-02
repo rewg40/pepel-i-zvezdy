@@ -26,8 +26,13 @@ func _find(root_node: Node, cls: String) -> Node:
 func _shot(name: String) -> void:
 	await _frames(3)
 	var img := root.get_texture().get_image()
-	img.save_png("res://ci/shots/%s.png" % name)
-	print("shot ", name, " ", img.get_size())
+	var dir := OS.get_environment("SHOT_DIR")
+	if dir.is_empty():
+		dir = "res://ci/shots"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := dir.path_join("%s.png" % name)
+	var err := img.save_png(path)
+	print("shot ", name, " ", img.get_size(), " -> ", path, " err=", err)
 
 
 func _place(pos: Vector3, look_at_point: Vector3) -> void:
@@ -37,7 +42,6 @@ func _place(pos: Vector3, look_at_point: Vector3) -> void:
 
 
 func _run() -> void:
-	DirAccess.make_dir_recursive_absolute("res://ci/shots")
 	scene = (load("res://main.tscn") as PackedScene).instantiate()
 	root.add_child(scene)
 	current_scene = scene
