@@ -197,6 +197,9 @@ func _spawn_island_fill() -> void:
 		var m := mi as MeshInstance3D
 		if _ground_mat != null:
 			m.material_override = _ground_mat
+		# заплатка лежит вровень с землёй и не должна отбрасывать тень:
+		# иначе на ней самой появляются чёрные треугольники (shadow acne)
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		n += 1
 	print("заплатки земли: ", n, " мешей")
 
