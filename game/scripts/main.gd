@@ -127,6 +127,21 @@ func _fix_island_materials(island: Node) -> void:
 			if not (mat is StandardMaterial3D):
 				continue
 			var std_mat := mat as StandardMaterial3D
+			# вода и дно были почти чёрными (0.003 / 0.008) — сквозь дыры в
+			# меше и на горизонте они читались как чёрные провалы, красим в
+			# нормальные морские цвета
+			if String(mat.resource_name) == "Ocean":
+				var water: StandardMaterial3D = std_mat.duplicate()
+				water.albedo_color = Color(0.10, 0.26, 0.38, 0.88)
+				water.roughness = 0.12
+				water.metallic_specular = 0.6
+				mesh_instance.set_surface_override_material(surf, water)
+				continue
+			if String(mat.resource_name) == "Seafloor":
+				var floor_mat: StandardMaterial3D = std_mat.duplicate()
+				floor_mat.albedo_color = Color(0.26, 0.25, 0.20)
+				mesh_instance.set_surface_override_material(surf, floor_mat)
+				continue
 			if std_mat.albedo_texture != null and _ground_mat != null:
 				mesh_instance.set_surface_override_material(surf, _ground_mat)
 				ground += 1
