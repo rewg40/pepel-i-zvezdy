@@ -271,10 +271,16 @@ def main() -> int:
     # скалы): высота по клеткам прыгает на 40+ м, и сетка строит из этого
     # вертикальные простыни. Поэтому берём карту высот и мягко её сглаживаем,
     # сохраняя общий рельеф: результат — холмистая земля без стен.
+    # Мягкое сглаживание: убирает перепады наложенных слоёв (до 50 м), из-за
+    # которых сетка строила вертикальные простыни
     inner_h = heights.copy()
     for _ in range(30):
         inner_h = sum(neighbours(inner_h)) * 0.25
     inner_h = limit_slope(inner_h, np.zeros_like(cov), hcell, max_step=0.6)
+    # Сетку рисуем только там, где меша нет или он заметно ниже неё: иначе на
+    # границе «сетка vs меш» встаёт видимая стенка
+    real = cov & (np.abs(hmax - inner_h) < 1.5)
+    inner_cells = np.pad(~real, ((0, 1), (0, 1)), mode="edge")[:res - 1, :res - 1]
     inner_h = limit_slope(inner_h, cov, hcell, max_step=0.5)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
