@@ -117,6 +117,22 @@ def fill_nearest(h, valid):
     return h, dist
 
 
+def local_surface(h, valid, win=7):
+    """Локальная медиана высот поверхности по валидным клеткам."""
+    stack = []
+    for dy in range(-(win // 2), win // 2 + 1):
+        for dx in range(-(win // 2), win // 2 + 1):
+            sh = np.roll(np.roll(h, dy, 0), dx, 1)
+            sk = np.roll(np.roll(valid, dy, 0), dx, 1)
+            stack.append(np.where(sk, sh, np.nan))
+    arr = np.stack(stack)
+    with np.errstate(all="ignore"), __import__("warnings").catch_warnings():
+        __import__("warnings").simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(arr, axis=0)
+    # там, где валидных соседей нет вовсе, доверяем самой клетке
+    return np.where(np.isnan(med), h, med)
+
+
 def harmonic_fill(h, valid, iters=2000, tol=1e-3):
     """Гармоническая интерполяция высот в дырах (решение Лапласа, Якоби).
 
@@ -229,21 +245,30 @@ def main() -> int:
     ax, az = float(arena["x"]), float(arena["z"])
 
     print("внутренняя сетка (1 м, высоты из heightmap.f32)")
-    cov, _ = raster(P, I, hx0, hz0, hcell, res, res)
+    cov, hmax = raster(P, I, hx0, hz0, hcell, res, res)
+    # в меше есть второй, нижний слой поверхности (морское дно): клетка, где
+    # треугольник лежит на десятки метров ниже карты высот, — это не земля,
+    # сквозь неё просвечивает тёмное дно. Считаем такие клетки дырами.
+    cov = cov & (np.abs(hmax - heights) < 3.0)
+    print("  покрытие 1 м: %d клеток" % int(cov.sum()))
     inner_holes = dilate(~cov, INNER_DILATE)
     inner_cells = inner_holes[:res - 1, :res - 1]
     print("  дыр %d из %d клеток" % (int((~cov).sum()), cov.size))
     # heightmap в дырах экстраполирован и местами врёт на десятки метров
     # (перепад 47 м на одной клетке) — сглаживаем и ограничиваем уклон,
     # иначе на месте дыры встаёт вертикальная стена
-    inner_h = harmonic_fill(heights, cov, iters=2000)
+    inner_h = harmonic_fill(np.where(cov, heights, 0.0), cov, iters=2000)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
     ox0 = ax - OUTER_RADIUS
     oz0 = az - OUTER_RADIUS
     onx = onz = int(round(2 * OUTER_RADIUS / OUTER_CELL))
-    cov_o, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
+    cov_o_raw, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
+    cov_o = cov_o_raw
+    # то же снаружи: сравниваем с локальной медианой поверхности
+    cov_o = cov_o & (h_o > local_surface(h_o, cov_o) - 20.0)
     valid = cov_o
+    print("  покрытие меша %d, после фильтра нижнего слоя %d" % (int(cov_o_raw.sum()), int(cov_o.sum())))
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
     h_filled = harmonic_fill(h_filled, cov_o, iters=2000)

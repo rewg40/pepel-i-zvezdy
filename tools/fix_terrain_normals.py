@@ -18,6 +18,12 @@
 
 Позиции не меняются: правим только буферы индексов и нормалей.
 
+Заодно убираем второй, нижний слой поверхности: в зоне heightmap 17 треугольников
+из 36 лежат на 10–45 м ниже настоящей земли. Сверху они выглядят чёрными
+плитами (дно/подложка), сквозь них не видно песка. Такие треугольники
+схлопываем в вырожденные (все индексы в одну вершину) — они перестают
+рисоваться, а дыры закрывает заплатка tools/make_island_fill.py.
+
     python3 tools/fix_terrain_normals.py            # правит island.glb
     python3 tools/fix_terrain_normals.py --check    # только отчёт
 """
@@ -33,6 +39,9 @@ import glb_io  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GLB = os.path.join(ROOT, "game", "models", "island.glb")
+HM_JSON = os.path.join(ROOT, "game", "models", "heightmap.json")
+HM_F32 = os.path.join(ROOT, "game", "models", "heightmap.f32")
+LOWER_LAYER_DEPTH = 10.0   # м ниже карты высот — это не земля
 TERRAIN_MESH = 0
 
 
@@ -105,6 +114,25 @@ def main() -> int:
         raw = F.astype(iw).tobytes()
         blob[idx_off:idx_off + len(raw)] = raw
     n[flipped] *= -1.0
+
+    # --- второй слой поверхности под землёй: схлопываем в вырожденные
+    hm = json.load(open(HM_JSON))
+    res = int(hm["res"])
+    hx0, hz0, hcell = float(hm["x0"]), float(hm["z0"]), float(hm["cell"])
+    H = np.fromfile(HM_F32, dtype="<f4").astype(np.float64).reshape(res, res)
+    c = T.mean(1)
+    ix = np.round((c[:, 0] - hx0) / hcell).astype(int)
+    iz = np.round((c[:, 2] - hz0) / hcell).astype(int)
+    inb = (ix >= 0) & (iz >= 0) & (ix < res) & (iz < res)
+    ref = np.zeros(len(T))
+    ref[inb] = H[iz[inb], ix[inb]]
+    lower = inb & (T[:, :, 1].max(1) < ref - LOWER_LAYER_DEPTH)
+    print("нижний слой поверхности: %d треугольников из %d в зоне heightmap"
+          % (int(lower.sum()), int(inb.sum())))
+    if not check and lower.any():
+        F[lower] = F[lower][:, :1].repeat(3, axis=1)
+        raw = F.astype(iw).tobytes()
+        blob[idx_off:idx_off + len(raw)] = raw
 
     VN = np.zeros_like(P)
     for k in range(3):
