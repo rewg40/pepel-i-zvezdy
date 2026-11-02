@@ -48,6 +48,7 @@ func _setup_environment() -> void:
 	env.fog_light_color = Color(0.72, 0.70, 0.66)
 	env.fog_density = 0.0016
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 0.85
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
@@ -55,7 +56,7 @@ func _setup_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 1.35
+	sun.light_energy = 1.15
 	sun.light_color = Color(1.0, 0.94, 0.86)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 180.0
@@ -86,7 +87,31 @@ func _spawn_island() -> void:
 	var island := packed.instantiate()
 	island.name = "Island"
 	add_child(island)
+	_fix_island_materials(island)
 	_make_heightmap_collision()
+
+
+## Остров собран из одного меша на 20×20 км с UV 0..1 на всю карту: у арены
+## остаётся 8 вершин на 120 м, и текстура растягивается в ровное пятно.
+## Поэтому включаем тайлинг материала — детализация возвращается.
+func _fix_island_materials(island: Node) -> void:
+	var n := 0
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := mi as MeshInstance3D
+		var count := mesh_instance.mesh.get_surface_count() if mesh_instance.mesh else 0
+		for surf in count:
+			var mat := mesh_instance.get_active_material(surf)
+			if not (mat is StandardMaterial3D):
+				continue
+			if mat.albedo_texture == null:
+				continue          # вода и морское дно — однотонные
+			var dup: StandardMaterial3D = mat.duplicate()
+			dup.uv1_scale = Vector3(120.0, 120.0, 1.0)
+			dup.texture_repeat = true
+			mesh_instance.set_surface_override_material(surf, dup)
+			n += 1
+	if n > 0:
+		print("остров: тайлинг текстуры включён для ", n, " поверхностей")
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).
