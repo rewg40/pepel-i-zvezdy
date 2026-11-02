@@ -47,12 +47,34 @@
 * **HUD** — прицел, подсказки и строка состояния каждого зомби
   (тело HP, сколько рук/ног, режим передвижения).
 
+## Внешние клипы (Mixamo)
+
+В `models/` лежат два файла с ретаргетнутыми клипами Mixamo:
+
+| файл | клипы |
+|---|---|
+| `models/medic_clips.glb` | `MxIdle, MxWalk, MxRun, MxSlash, MxAttack, MxHit, MxDeath` |
+| `models/zombie_clips.glb` | `MxWalk, MxRun, MxCrawl, MxAttack, MxHit, MxDeath, MxIdle` |
+
+Они подмешиваются в `AnimationPlayer` при старте (`_merge_clips`), а выбор между
+родными и внешними клипами делает `@export var clip_prefix` у `player.gd` и
+`zombie.gd`: по умолчанию `"Mx"`, то есть игра играет именно клипы Mixamo, а если
+поле очистить — вернутся родные. Файлов нет — игра работает как раньше.
+
+Как пересобрать или добавить свои клипы (без Blender):
+
+```bash
+/tmp/venv/bin/python tools/retarget.py clips/*.fbx game/models/zombie.glb \
+    game/models/zombie_clips.glb --prefix Mx --rename walking=Walk --rename crawling=Crawl
+```
+
+Подробности и ключи — в `tools/README.md`, раздел «Внешние анимации».
+
 ## Важно про GLB в git
 
-`.gitignore` репозитория исключает `*.glb` (лимит GitHub 100 МБ на файл), поэтому
-собранные ассеты `game/models/*.glb` **не попадают в git** — они лежат в рабочей
-папке. Если клонировать репозиторий заново, ассеты надо пересобрать скриптами из
-`tools/` (см. `tools/README.md`, ~1 минута на персонажа).
+`.gitignore` исключает `*.glb`, но для `game/models/*.glb` сделано исключение:
+модели лежат в репозитории, чтобы проект открывался сразу. Если пересобирать их
+скриптами из `tools/` (см. `tools/README.md`), не забудьте закоммитить результат.
 
 ## Файлы
 

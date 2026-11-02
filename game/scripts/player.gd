@@ -21,6 +21,8 @@ const ANIMS := {
 
 @export var model_scale := MODEL_SCALE_DEFAULT
 @export_file("*.glb") var extra_clips := "res://models/medic_clips.glb"
+## Префикс имён клипов из extra_clips ("Mx" -> MxIdle, MxWalk…). Пусто — родные.
+@export var clip_prefix := "Mx"
 @export var mouse_sensitivity := 0.0025
 @export var sword_offset := Vector3(0.0, 0.02, 0.0)
 @export var sword_rotation_deg := Vector3(180.0, 0.0, 0.0)
@@ -66,7 +68,7 @@ func _ready() -> void:
 	skeleton = _find_skeleton(model)
 	_merge_clips(anim, extra_clips)
 	for n in ANIMS.values():
-		if anim and not anim.has_animation(n):
+		if anim and not anim.has_animation(n) and not anim.has_animation(clip_prefix + n):
 			push_warning("в модели нет анимации " + n)
 
 	arm = SpringArm3D.new()
@@ -221,11 +223,21 @@ func take_damage(amount: float) -> void:
 func play(anim_name: String) -> void:
 	if anim == null:
 		return
-	var a: String = ANIMS.get(anim_name, anim_name)
+	var a := _clip(ANIMS.get(anim_name, anim_name))
+	if a.is_empty():
+		return
 	if anim.current_animation == a and anim.is_playing():
 		return
-	if anim.has_animation(a):
-		anim.play(a, 0.15)
+	anim.play(a, 0.15)
+
+
+## Имя клипа с учётом clip_prefix: MxIdle, если он есть, иначе родной Idle.
+func _clip(base_name: String) -> String:
+	if not clip_prefix.is_empty() and anim != null:
+		var pref := clip_prefix + base_name
+		if anim.has_animation(pref):
+			return pref
+	return base_name if anim != null and anim.has_animation(base_name) else ""
 
 
 func start_attack() -> void:
@@ -234,8 +246,9 @@ func start_attack() -> void:
 	_attacking = true
 	_attack_timer = 0.0
 	_hit_done = false
-	if anim and anim.has_animation(ANIMS["attack"]):
-		anim.play(ANIMS["attack"], 0.05, 1.0)
+	var atk := _clip(ANIMS["attack"])
+	if not atk.is_empty():
+		anim.play(atk, 0.05, 1.0)
 		anim.speed_scale = 1.0
 
 

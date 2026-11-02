@@ -180,8 +180,8 @@ class RigData:
         for j in reversed(chain):
             t, q, sc = node_local(self.js, j)
             L = np.eye(4)
-            L[:3, :3] = mat_from_q(q) * sc
-            L[:3, 3] = t
+            L[:3, :3] = mat_from_q(q)          # node scale is ignored on purpose:
+            L[:3, 3] = t                       # Mixamo FBXs carry a 100x armature
             M = M @ L
         return M
 
@@ -229,7 +229,7 @@ class RigData:
                     f = (t - times[k]) / max(times[k + 1] - times[k], 1e-9)
                     f = min(max(f, 0.0), 1.0)
                     p = vals[k] * (1 - f) + vals[k + 1] * f
-            P = P + R @ (p * s0)
+            P = P + R @ p
             R = R @ mat_from_q(q)
         return R, P
 
@@ -257,7 +257,54 @@ def read_clip(path, fps=30.0):
             tracks.setdefault(node, {})[p] = (times, vals)
         name = an.get('name') or 'Clip%d' % len(out)
         out[name] = {'tracks': tracks, 'duration': dur}
+    for clip in out.values():
+        fix_assimp_tracks(js, clip['tracks'])
     return out, js, b
+
+
+def _parent_index(js):
+    pidx = {}
+    for i, n in enumerate(js['nodes']):
+        for c in n.get('children', []):
+            pidx[c] = i
+    return pidx
+
+
+def assimp_pre_chain(js, pidx, name, names):
+    """Product of the `<bone>_$AssimpFbx$_PreRotation/_Rotation` helper nodes.
+
+    Assimp exports an FBX joint as `<parent> -> <bone>_$Translation ->
+    <bone>_$PreRotation -> <bone>_$Rotation -> <bone>`, and then writes the FBX
+    animation channel (which already contains the joint orient) straight onto
+    <bone>.  Played back naively the pre-rotation is applied twice, which flips
+    limbs by 180 degrees; the channel has to be re-based on the helper chain.
+    """
+    if name not in names:
+        return None
+    j = pidx.get(names.index(name))
+    q = np.array([1.0, 0.0, 0.0, 0.0])
+    found = False
+    while j is not None and names[j].startswith(name + '_$AssimpFbx$'):
+        _t, qj, _s = node_local(js, j)
+        q = q_mul(q, qj)                    # parent -> child order
+        found = True
+        j = pidx.get(j)
+    return q if found else None
+
+
+def fix_assimp_tracks(js, tracks):
+    """Undo the double-applied joint orient of assimp-converted FBX files."""
+    names = [n.get('name', 'node%d' % i) for i, n in enumerate(js['nodes'])]
+    pidx = _parent_index(js)
+    for name in list(tracks):
+        pre = assimp_pre_chain(js, pidx, name, names)
+        if pre is None:
+            continue
+        tracks[name].pop('translation', None)   # offsets live on the helpers
+        if 'rotation' in tracks[name]:
+            times, vals = tracks[name]['rotation']
+            inv = np.array([pre[0], -pre[1], -pre[2], -pre[3]])
+            tracks[name]['rotation'] = (times, np.stack([q_mul(inv, q) for q in vals]))
 
 
 # --------------------------------------------------------------------------- #
@@ -311,6 +358,8 @@ def normalize(name):
     for prefix in ('mixamorig', 'bip01', 'bip001', 'armature', 'def'):
         if s.startswith(prefix):
             s = s[len(prefix):]
+            s = s.lstrip('0123456789')      # mixamorig9:Hips, bip01_01_L_Thigh
+            break
     return s
 
 
@@ -340,8 +389,43 @@ def build_mapping(src_names, target_names, overrides=None):
 # --------------------------------------------------------------------------- #
 # retargeting
 # --------------------------------------------------------------------------- #
+def _vangle(a, b):
+    """Angle in degrees between two directions."""
+    a = np.asarray(a, float)
+    b = np.asarray(b, float)
+    c = float(np.dot(a, b)) / max(np.linalg.norm(a) * np.linalg.norm(b), 1e-12)
+    return math.degrees(math.acos(min(1.0, max(-1.0, c))))
+
+
+def _angle(A, B):
+    c = (np.trace(np.asarray(A).T @ np.asarray(B)) - 1.0) / 2.0
+    return math.degrees(math.acos(min(1.0, max(-1.0, c))))
+
+
+def rot_between(a, b):
+    """Minimal rotation matrix that turns unit vector a into unit vector b."""
+    a = np.asarray(a, float)
+    b = np.asarray(b, float)
+    a = a / max(np.linalg.norm(a), 1e-12)
+    b = b / max(np.linalg.norm(b), 1e-12)
+    v = np.cross(a, b)
+    c = float(np.dot(a, b))
+    if c < -0.999999:                       # opposite: any perpendicular axis
+        axis = np.cross(a, [1.0, 0.0, 0.0])
+        if np.linalg.norm(axis) < 1e-6:
+            axis = np.cross(a, [0.0, 1.0, 0.0])
+        return mat_from_q(q_axis(axis, math.pi))
+    return mat_from_q(q_norm(np.array([1.0 + c, v[0], v[1], v[2]])))
+
+
+def _dir_of(rig, name, child):
+    v = rig.rest_world[child][:3, 3] - rig.rest_world[name][:3, 3]
+    n = float(np.linalg.norm(v))
+    return v / n if n > 1e-9 else None
+
+
 def retarget_clip(clip, src, dst, mapping, fps=30.0, scale=None, strip_xz=False,
-                  extra_offset=None):
+                  extra_offset=None, ref_time=0.0, ref='auto', mode='rot'):
     """-> {'times': [...], 'rot': {bone: [q...]}, 'hips': [Vector3...], 'duration'}"""
     dur = clip['duration']
     if dur <= 0:
@@ -364,23 +448,189 @@ def retarget_clip(clip, src, dst, mapping, fps=30.0, scale=None, strip_xz=False,
     root_bone = dst.names[0]
     src_root = mapping.get(root_bone) or src_hips
 
+    # A Mixamo FBX converted by Assimp carries the armature object itself as an
+    # animated node ("CharacterArmature"), with the FBX unit-scale (100x) baked
+    # into it.  Everything above our topmost mapped bone is object motion, not
+    # character motion, so we express the whole source pose relative to that bone.
+    mapped_src = [s for s in src_rest]
+    base = None
+    if src_hips in src.idx:
+        chain = src._chain(src_hips)
+        if len(chain) > 1:
+            for j in chain:
+                nm = src.js['nodes'][j].get('name')
+                if nm in mapped_src and j != chain[-1]:
+                    base = nm
+                    break
+
+    def rel(R, P, Rb, Pb, is_base=False):
+        if base is None:
+            return R, P
+        if is_base:
+            return R, P - Pb
+        return Rb.T @ R, Rb.T @ (P - Pb)
+
     if scale is None:
         h_dst = dst.height()
-        h_src = max(max(src.rest_world[s][1, 3] for s in src_rest), 1e-6)
+        Rb0 = src.rest_world[base][:3, :3] if base else np.eye(3)
+        Pb0 = src.rest_world[base][:3, 3] if base else np.zeros(3)
+        h_src = max(max(rel(src.rest_world[s][:3, :3], src.rest_world[s][:3, 3],
+                            Rb0, Pb0, s == base)[1][1] for s in src_rest), 1e-6)
         scale = h_dst / h_src
     fix = np.eye(3)
     if src_root and src_root in src_rest:
         fix = dst_rest[root_bone][:3, :3] @ src_rest[src_root][:3, :3].T
 
-    hips_rest_src = src.rest_world[src_hips][:3, 3] if src_hips else np.zeros(3)
+    hips_rest_src = rel(np.eye(3), src.rest_world[src_hips][:3, 3], Rb0, Pb0,
+                        src_hips == base)[1] if src_hips else np.zeros(3)
     hips_rest_dst = dst.rest_world[hips_bone][:3, 3]
     parent_world_dst = {}
     for b in dst.names:
         p = dst.parent[b]
         parent_world_dst[b] = dst.rest_world[p] if p else np.eye(4)
 
+    # ---- reference pose.
+    # Retargeting transfers "how the bone moved away from its reference pose".
+    # The natural reference is the bind pose, but Mixamo binds its skeletons in a
+    # T-pose while our characters rest with their arms down, so the arms would be
+    # pushed ~70 degrees down in every clip.  When the bind pose is clearly
+    # unlike our rest pose we take the clip's own first frame as the reference
+    # instead: that frame is the animation's neutral stand, and our rest pose is
+    # lined up with it.
+    Rb0 = src.rest_world[base][:3, :3] if base else np.eye(3)
+    Pb0 = src.rest_world[base][:3, 3] if base else np.zeros(3)
+
+    # world -> world frame between the source's top node and our armature
+    frame_src = base
+    if frame_src is None and src_hips in src.idx:
+        chain = src._chain(src_hips)
+        if chain:
+            frame_src = src.js['nodes'][chain[0]].get('name')
+    frame_fix = None
+    if frame_src in src.rest_world:
+        frame_fix = dst_rest[root_bone][:3, :3] @ src.rest_world[frame_src][:3, :3].T
+
+    def src_ref(b, s, t):
+        Rw, Pw = src.world_at(s, float(t), tracks)
+        return rel(Rw, Pw, Rb0, Pb0, s == base)[0]
+
+    samples = [float(x) for x in np.linspace(0.0, dur, min(24, max(4, n)))[:-1]]
+
+    def mean_dir(b, s, t_list):
+        acc = np.zeros(3)
+        c = next((k for k in dst.names if dst.parent[k] == b and mapping.get(k)), None)
+        c_src = next((k for k in src.names if src.parent[k] == s), None)
+        if c is None or c_src is None:
+            return None
+        for tt in t_list:
+            Rw, Pw = src.world_at(s, tt, tracks)
+            _, Pc = src.world_at(c_src, tt, tracks)
+            v = Pc - Pw
+            if np.linalg.norm(v) > 1e-9:
+                acc += v / np.linalg.norm(v)
+        return acc if np.linalg.norm(acc) > 1e-9 else None
+
+    def _ref_score(kind):
+        """How far the source neutral is from our rest pose, in degrees."""
+        fix0 = frame_fix if frame_fix is not None else dst_rest[root_bone][:3, :3] @ Rb0.T
+        score = total = 0.0
+        for b in ('UpperArm_L', 'UpperArm_R', 'LowerArm_L', 'LowerArm_R',
+                  'Thigh_L', 'Thigh_R', 'Shin_L', 'Shin_R'):
+            s = mapping.get(b)
+            if not s or b not in dst.parent or src.parent.get(s) is None:
+                continue
+            d_d = _dir_of(dst, b, next(k for k in dst.names if dst.parent[k] == b))
+            if d_d is None:
+                continue
+            if kind == 'bind':
+                d_s = _dir_of(src, s, next(k for k in src.names if src.parent[k] == s))
+            else:
+                d_s = mean_dir(b, s, samples)
+            if d_s is None:
+                continue
+            score += _vangle(fix0 @ d_s, d_d)
+            total += 1
+        return score / total if total else 1e9
+
+    use_first = ref in ('first', 'mean')
+    if ref == 'auto':
+        # pick the reference that puts our rest pose closest to the clip's
+        # neutral: for T-pose binders (Mixamo) that is the clip itself
+        first_score = _ref_score('mean')
+        bind_score = _ref_score('bind')
+        ref = 'mean' if first_score < bind_score else 'bind'
+        use_first = ref == 'mean'
+    ref_kind = 'mean' if ref == 'mean' else ('first' if use_first else 'bind')
+    ref_rot = {}
+    n_ref = 0
+    for b, s in mapping.items():
+        if s is None or s not in src_rest:
+            continue
+        if ref == 'mean':
+            # chordal mean of the clip's own poses == its neutral stand
+            M = np.zeros((3, 3))
+            for tt in samples:
+                M += src_ref(b, s, tt)
+            U, _sv, Vt = np.linalg.svd(M)
+            ref_rot[s] = U @ Vt
+        elif use_first:
+            ref_rot[s] = src_ref(b, s, ref_time)
+        else:
+            ref_rot[s] = rel(src_rest[s][:3, :3], src_rest[s][:3, 3],
+                             Rb0, Pb0, s == base)[0]
+        n_ref += 1
+
     out = {'times': times.tolist(), 'rot': {b: [] for b in dst.names},
-           'hips': [], 'duration': dur, 'scale': float(scale)}
+           'hips': [], 'duration': dur, 'scale': float(scale), 'ref_bones': n_ref,
+           'ref': ref_kind}
+
+    # ---- direction ("aim") transfer for the limbs.
+    # Our characters rest with their arms down, Mixamo binds them in a T-pose, so
+    # copying world orientations overshoots the shoulders by ~70 degrees.  For a
+    # bone that has a mapped child we instead transfer how the *direction* of the
+    # bone changes between the clip's reference frame and time t, and apply that
+    # swing to our own rest direction.  Directions are immune to the different
+    # bind poses; leaves (hands, feet) and the hips keep the orientation transfer.
+    def src_dir(s1, s2, tt):
+        _, p1 = src.world_at(s1, float(tt), tracks)
+        _, p2 = src.world_at(s2, float(tt), tracks)
+        if base is not None:
+            _, pb = src.world_at(base, float(tt), tracks)
+            p1, p2 = p1 - pb, p2 - pb
+        v = p2 - p1
+        nrm = float(np.linalg.norm(v))
+        return v / nrm if nrm > 1e-9 else None
+
+    aim = {}
+    aim_child = {}
+    if mode == 'aim' and frame_fix is not None:
+        for b in dst.names:
+            s1 = mapping.get(b)
+            if not s1 or b in ('Root', 'Hips'):
+                continue
+            c = next((k for k in dst.names if dst.parent[k] == b and mapping.get(k)), None)
+            if c is None:
+                continue
+            d_d = dst.rest_world[c][:3, 3] - dst.rest_world[b][:3, 3]
+            if np.linalg.norm(d_d) < 1e-6:
+                continue
+            # the same reference the rotations use: bind pose, first frame or
+            # the clip's average direction (stride-neutral)
+            if ref == 'mean':
+                acc = np.zeros(3)
+                for tt in samples:
+                    v = src_dir(s1, mapping[c], tt)
+                    if v is not None:
+                        acc += v
+                d_s = acc / np.linalg.norm(acc) if np.linalg.norm(acc) > 1e-9 else None
+            elif use_first:
+                d_s = src_dir(s1, mapping[c], ref_time)
+            else:
+                d_s = _dir_of(src, s1, mapping[c])
+            if d_s is None:
+                continue
+            aim[b] = (d_d / np.linalg.norm(d_d), d_s)
+            aim_child[b] = c
 
     for t in times:
         world = {}
@@ -391,9 +641,32 @@ def retarget_clip(clip, src, dst, mapping, fps=30.0, scale=None, strip_xz=False,
             if s is None:
                 continue
             Rw, Pw = src.world_at(s, float(t), tracks)
+            if base is not None:
+                Rb, Pb = src.world_at(base, float(t), tracks)
+                Rw, Pw = rel(Rw, Pw, Rb, Pb, s == base)
             delta = fix @ (Pw - hips_rest_src) * scale
-            off = dst_rest[b][:3, :3] @ (src_rest[s][:3, :3]).T
-            world[b] = (off @ Rw, delta)
+            if b in aim:
+                d_d, d_s_ref = aim[b]
+                d_s_now = src_dir(s, mapping[aim_child[b]], t)
+                if d_s_now is not None:
+                    target = frame_fix @ d_s_now
+                    ref_w = frame_fix @ d_s_ref
+                    if _vangle(d_d, ref_w) < 25.0:
+                        # our rest points the same way as the clip's neutral:
+                        # follow the clip exactly (knees and elbows then bend
+                        # as far as the animation needs)
+                        d_new = target
+                    else:
+                        # rest poses really differ, keep our own bias and only
+                        # transfer how the direction *changed*
+                        swing = rot_between(d_s_ref, d_s_now)
+                        swing = frame_fix @ swing @ frame_fix.T
+                        d_new = swing @ d_d
+                    Rw = rot_between(d_d, d_new) @ dst_rest[b][:3, :3]
+            else:
+                off = dst_rest[b][:3, :3] @ ref_rot[s].T
+                Rw = off @ Rw
+            world[b] = (Rw, delta)
         # ---- convert to local
         hips_local = None
         for b in dst.names:
@@ -536,12 +809,31 @@ def clip_name(raw, stem):
     return out.strip('_') or 'Clip'
 
 
+def fbx_to_glb(src):
+    """Convert an FBX with tools/fbx2glb.js (assimp/wasm, no Blender needed)."""
+    import shutil
+    import subprocess
+    import tempfile
+    node = shutil.which('node')
+    if node is None:
+        raise RuntimeError('node is required to convert FBX '
+                           '(or export GLB from Blender/Mixamo)')
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fbx2glb.js')
+    out = os.path.join(tempfile.mkdtemp(prefix='fbx2glb_'),
+                       os.path.splitext(os.path.basename(src))[0] + '.glb')
+    r = subprocess.run([node, script, src, out], capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(out):
+        raise RuntimeError((r.stderr or r.stdout).strip().splitlines()[-1:][0]
+                           if (r.stderr or r.stdout) else 'fbx2glb failed')
+    return out
+
+
 def gather_sources(paths):
     files = []
     for p in paths:
         if os.path.isdir(p):
-            files += sorted(glob.glob(os.path.join(p, '*.glb')) +
-                            glob.glob(os.path.join(p, '*.GLB')))
+            for pat in ('*.glb', '*.GLB', '*.fbx', '*.FBX'):
+                files += sorted(glob.glob(os.path.join(p, pat)))
         else:
             files.append(p)
     return files
@@ -555,9 +847,19 @@ def main(argv=None):
     ap.add_argument('target', help='our character GLB (game/models/medic.glb, zombie.glb)')
     ap.add_argument('out', help='output GLB with the retargeted AnimationLibrary')
     ap.add_argument('--clips', default=None, help='comma separated clip names to keep')
+    ap.add_argument('--prefix', default='', help='prefix added to every clip name')
+    ap.add_argument('--rename', action='append', default=[], metavar='FROM=TO',
+                    help='rename a clip (or a source file stem), e.g. --rename walking=Walk')
+    ap.add_argument('--ref', choices=('auto', 'bind', 'first', 'mean'), default='auto',
+                    help='reference pose: bind = file rest pose, first = clip first '
+                         'frame, mean = average pose of the clip (good for cycles and '
+                         'for T-pose binders like Mixamo), auto = pick per clip')
     ap.add_argument('--fps', type=float, default=30.0, help='resample rate (default 30)')
     ap.add_argument('--strip-xz', action='store_true',
                     help='kill horizontal hip motion (in-place locomotion clips)')
+    ap.add_argument('--mode', choices=('aim', 'rot'), default='aim',
+                    help="aim = transfer bone directions (hands/feet/hips keep rotation), "
+                         "rot = transfer full world rotations")
     ap.add_argument('--ground', action='store_true',
                     help='raise/lower the clip so the lowest hip frame sits at rest height')
     ap.add_argument('--no-probe', action='store_true',
@@ -581,12 +883,26 @@ def main(argv=None):
         k, v = m.split('=', 1)
         overrides[k.strip()] = v.strip()
 
+    renames = {}
+    for m in a.rename:
+        if '=' not in m:
+            print(f'bad --rename {m!r}, expected FROM=TO')
+            return 2
+        k, v = m.split('=', 1)
+        renames[k.strip()] = v.strip()
+
     only = None
     if a.clips:
         only = {c.strip() for c in a.clips.split(',') if c.strip()}
 
     jobs = []
     for f in files:
+        if f.lower().endswith('.fbx'):
+            try:
+                f = fbx_to_glb(f)
+            except Exception as e:                            # noqa: BLE001
+                print(f'! {f}: {e}')
+                continue
         try:
             clips, _, _ = read_clip(f, a.fps)
         except Exception as e:                                # noqa: BLE001
@@ -620,23 +936,25 @@ def main(argv=None):
     seen = {}
     out_clips = []
     for f, name, clip, mp, src in jobs:
+        stem_used = os.path.splitext(os.path.basename(f))[0]
         k = name
         n = seen.get(k, 0)
         seen[k] = n + 1
         if n:
             k = f'{name}_{n + 1}'
         mapping = {b: s for b, s in mp.items() if s}
-        res = retarget_clip(clip, src, dst, mapping, fps=a.fps, strip_xz=a.strip_xz)
+        res = retarget_clip(clip, src, dst, mapping, fps=a.fps, strip_xz=a.strip_xz,
+                            mode=a.mode, ref=a.ref)
         off = measure_ground_offset(res, dst)
         if a.ground and abs(off) > 0.005:
             d = np.array([0.0, -off, 0.0])
             d = np.linalg.inv(dst.rest_world['Root'][:3, :3]) @ d
             res['hips'] = [h + d for h in res['hips']]
             off = 0.0
-        out_clips.append((k, res))
+        out_clips.append((a.prefix + renames.get(k, renames.get(stem_used, k)), res))
         print(f'  {k:16s} <- {os.path.basename(f)}  ({res["duration"]:.2f}s, '
               f'{len(res["times"])} frames, scale {res["scale"]:.3f}, '
-              f'hips min {off:+.2f} m)')
+              f'ref {res["ref"]}, hips min {off:+.2f} m)')
 
     names = write_clip_glb(dst, out_clips, a.out, probe=not a.no_probe)
     print(f'\nwrote {a.out}: {len(names)} animation(s) -> {", ".join(names)}')

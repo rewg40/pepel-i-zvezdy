@@ -30,6 +30,8 @@ const PARTS := {
 
 @export var model_scale := 1.65
 @export_file("*.glb") var extra_clips := "res://models/zombie_clips.glb"
+## Префикс имён клипов из extra_clips ("Mx" -> MxWalk, MxCrawl…). Пусто — родные.
+@export var clip_prefix := "Mx"
 @export var max_hp := BODY_HP
 @export var title := "Зомби"
 
@@ -204,7 +206,16 @@ func _nearest_target():
 
 
 func _has_anim(n: String) -> bool:
-	return anim != null and anim.has_animation(n)
+	return _clip(n) != ""
+
+
+## Имя клипа с учётом clip_prefix: MxWalk, если он есть, иначе родной Walk.
+func _clip(base_name: String) -> String:
+	if anim == null:
+		return ""
+	if not clip_prefix.is_empty() and anim.has_animation(clip_prefix + base_name):
+		return clip_prefix + base_name
+	return base_name if anim.has_animation(base_name) else ""
 
 
 func _play(n: String, restart := false) -> void:
@@ -212,8 +223,9 @@ func _play(n: String, restart := false) -> void:
 		return
 	if _anim_name == n and not restart:
 		return
-	if anim.has_animation(n):
-		anim.play(n, 0.12)
+	var clip := _clip(n)
+	if not clip.is_empty():
+		anim.play(clip, 0.12)
 		_anim_name = n
 
 

@@ -106,22 +106,6 @@ def build_fake_source(dst, clip_rot, clip_hips, out_path, fps=30.0):
 
     # ---- animation: reproduce our world rotations with the foreign rest
     times = np.array(clip_rot['times'], np.float32)
-    # world rotation per frame for our bones
-    world = {}
-    for tname in dst.names:
-        p = dst.parent[tname]
-        local = np.array(clip_rot['rot'][tname])
-        world[tname] = (world[p] if p else [np.array([1.0, 0, 0, 0])] * len(local))
-        world[tname] = [RT.q_mul(RT.q_mul(world[tname][i], np.array([1.0, 0, 0, 0]))
-                                 if False else world[tname][i], local[i])
-                        for i in range(len(local))]
-    # simpler: fold properly
-    world = {}
-    for tname in dst.names:
-        p = dst.parent[tname]
-        local = np.array(clip_rot['rot'][tname])
-        base = world[p] if p else np.array([[1.0, 0, 0, 0]] * len(local))
-        world[tname] = [RT.q_mul(base[i], local[i]) for i in range(len(local))]
 
     samplers, channels = [], []
     t_acc = g.accessor(times)
@@ -185,7 +169,8 @@ def main():
     dst = RT.Skeleton('game/models/medic.glb')
     fx = RT.read_clip('game/models/medic.glb')[0]
     clip = fx['Walk']
-    res = RT.retarget_clip(clip, dst, dst, {n: n for n in dst.names}, fps=30.0)
+    res = RT.retarget_clip(clip, dst, dst, {n: n for n in dst.names}, fps=30.0,
+                           ref='bind', mode='rot')
     src_path = '/tmp/fake_source.glb'
     build_fake_source(dst, res, res['hips'], src_path)
 
@@ -197,7 +182,8 @@ def main():
     for k in dst.names:
         print(f'  {k:12s} <- {mapping.get(k)}')
     mapping = {k: v for k, v in mapping.items() if v is not None}
-    back = RT.retarget_clip(clips['Test'], src_rig, dst, mapping, fps=30.0)
+    back = RT.retarget_clip(clips['Test'], src_rig, dst, mapping, fps=30.0,
+                            ref='bind', mode='rot')
 
     worst = 0.0
     for b in dst.names:

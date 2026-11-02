@@ -50,42 +50,70 @@ python tools/build_sword.py game/models/sword.glb
 | `inspect_glb.py` | структура GLB (узлы, меши, анимации) |
 | `retarget.py` | чужие клипы (Mixamo / Quaternius / любой humanoid GLB) → наши кости |
 | `selftest_retarget.py` | круговой тест ретаргета: наш клип → чужой риг → обратно |
+| `fbx2glb.js` | FBX → GLB через assimp/wasm (`node`), нужен только для `.fbx`-клипов |
 
 ## Внешние анимации (ретаргет)
 
-Клипы не обязаны быть «своими»: `tools/retarget.py` перепекает любой humanoid-GLB
-(Mixamo, Quaternius Universal Animation Library, KayKit…) на **наш** скелет, так
-что в Godot не нужны ни BoneMap, ни SkeletonProfile — это обычные glTF-анимации
+Клипы не обязаны быть «своими»: `tools/retarget.py` перепекает любой humanoid-клип
+(Mixamo, Quaternius Universal Animation Library, KayKit, UE…) на **наш** скелет,
+так что в Godot не нужны ни BoneMap, ни SkeletonProfile — это обычные glTF-анимации
 с нашими именами костей.
 
 ```bash
-# 1. FBX из Mixamo -> GLB (Blender: File > Export > glTF, без меша достаточно
-#    "Selected Objects" = арматура + Action)
-# 2. перепечь на нужного персонажа
-/tmp/venv/bin/python tools/retarget.py clips/*.glb game/models/zombie.glb \
-    game/models/zombie_clips.glb
+# FBX и GLB можно мешать; папки тоже принимаются
+/tmp/venv/bin/python tools/retarget.py clips/ game/models/zombie.glb \
+    game/models/zombie_clips.glb --prefix Mx \
+    --rename walking=Walk --rename crawling=Crawl
 ```
 
-Полезные ключи:
+FBX конвертируется сам, через `tools/fbx2glb.js` (assimp в WebAssembly, Blender не
+нужен; требуется `node` и `npm install assimpjs` в корне репозитория).
 
 | ключ | зачем |
 |---|---|
 | `--list` | показать, какая кость источника легла на какую нашу (ничего не пишет) |
 | `--map Spine=Spine1` | поправить маппинг вручную, если имена незнакомые |
 | `--clips Walk,Run` | оставить только нужные клипы |
+| `--prefix Mx` | префикс ко всем именам (`MxWalk`), чтобы не перекрывать родные клипы |
+| `--rename walking=Walk` | переименовать клип (или файл), удобно для `mixamo.com` и `Ch31_nonPBR@Running` |
+| `--ref auto\|bind\|first\|mean` | опорная поза ретаргета (см. ниже), по умолчанию `auto` |
+| `--mode aim\|rot` | `aim` — переносить направления костей (дефолт), `rot` — полные мировые повороты |
 | `--strip-xz` | убрать горизонтальное движение бёдер (клип «на месте») |
 | `--ground` | приподнять/опустить клип так, чтобы нижняя точка бёдер была на уровне rest |
 | `--fps 30` | частота пересэмплирования |
 | `--no-probe` | не добавлять служебный квад (без него Godot не создаст Skeleton3D) |
 
-На выходе — файл с rest-скелетом персонажа, кожей и анимациями; имя узла
-арматуры совпадает с персонажем (`Medic_Rig` / `Zombie_Rig`), поэтому track-пути
-(`Skeleton3D:<bone>`) в Godot такие же, как у родных клипов. `player.gd` и
-`zombie.gd` подхватывают файл автоматически, если он лежит по пути из
-`extra_clips` (`res://models/medic_clips.glb`, `res://models/zombie_clips.glb`):
-клипы вливаются в default-библиотеку `AnimationPlayer` и не перекрывают родные.
+### Почему `--ref` важен
 
-Проверка математики без Godot:
+Ретаргет переносит «насколько кость ушла от опорной позы». Опорой может быть
+bind-поза файла или сама анимация:
+
+* Mixamo биндит скелет в **T-позе**, а наши персонажи стоят с опущенными руками.
+  Если взять bind, руки в каждом клипе уезжают вниз на ~70° — персонаж идёт
+  сгорбившись и с руками за спиной;
+* `--ref mean` (усреднённая поза клипа) и `--ref first` (первый кадр) решают это:
+  наш rest выравнивается по нейтральной стойке клипа, и ноги сгибаются в коленях
+  так же глубоко, как в оригинале;
+* `auto` считает оба варианта и берёт тот, где наш rest ближе к нейтрали клипа
+  (для Mixamo это всегда `mean`, для Quaternius/KayKit — часто `bind`).
+
+`--mode aim` переносит направления костей (бедро→колено, плечо→локоть), листья
+(кисти, стопы) и бёдра — полными поворотами. Это устойчиво к разной длине
+конечностей и к разной bind-позе.
+
+### Где брать клипы
+
+* **Mixamo** (mixamo.com) — ~2500 клипов, скачиваются как FBX for Unity / FBX
+  Binary, «Without Skin» — как раз то, что нужно. Сеть песочницы до mixamo.com не
+  достаёт, но файлы прекрасно лежат в открытых репозиториях на GitHub — их и
+  использовали для сборки `game/models/*_clips.glb`:
+  `Walking`, `Running`, `Breathing Idle`, `Crawling`, `Great Sword Slash`,
+  `Standing Melee Attack Horizontal`, `Hit Reaction`, `Death From The Front`.
+* **Quaternius Universal Animation Library 1/2** — 120+/130+ клипов, CC0, один
+  humanoid-риг, GLB/FBX/Blend.
+* **KayKit / Kenney** — CC0; **Microsoft Rocketbox** — FBX, читать условия.
+
+### Проверка без Godot
 
 ```bash
 /tmp/venv/bin/python tools/selftest_retarget.py
@@ -93,11 +121,23 @@ python tools/build_sword.py game/models/sword.glb
 
 Тест печёт наш клип в «чужой» риг (mixamo-имена, другие rest-ориентации, лишняя
 кость) и ретаргетит обратно: ошибка 0 и по кватернионам, и по бёдрам, и по
-матрицам из записанного файла. Живой пример сквозного прогона (Walk медика на
-скелет зомби, сверху — родной Walk зомби):
+матрицам из записанного файла. Плюс живой прогон на реальном клипе:
 
 ```bash
-/tmp/venv/bin/python tools/retarget.py game/models/medic.glb \
-    game/models/zombie.glb /tmp/z_medic.glb
-# game/preview/retarget_check.png
+/tmp/venv/bin/python tools/retarget.py /tmp/mx/walking.fbx \
+    game/models/medic.glb /tmp/w.glb
+# кадры: game/preview/mixamo_medic.png, game/preview/mixamo_zombie.png
 ```
+
+### Что пришлось учесть (грабли)
+
+* assimp-конвертация FBX вставляет узлы
+  `<кость>_$AssimpFbx$_Translation/_PreRotation/_Rotation` и пишет канал FBX
+  (в котором уже есть joint orient) прямо на кость — pre-rotation применяется
+  дважды, и конечности выворачиваются на 180°. `fix_assimp_tracks()` снимает
+  эти хелперы с трека (порядок умножения — от родителя к ребёнку).
+* В таких файлах есть анимированный объект-арматура с масштабом 100 (единицы
+  FBX). Всё, что выше верхней смаппленной кости, считается движением объекта и
+  отбрасывается, а масштаб не учитывается при чтении скелета.
+* Корень Mixamo (`mixamorig:Hips`) — это наши `Root`+`Hips` одновременно;
+  отдельной кости `Root` в клипе нет, поэтому позиция берётся из бёдер.
