@@ -294,6 +294,12 @@ def main() -> int:
     # многослойный), а пологая подложка на горизонте читается как земля.
     base = float(np.median(h_o[valid])) - 1.0
     h_filled = np.full_like(h_o, base)
+    # «крышки» над провалами: клетки, где поверхность на 10+ м ниже соседей, —
+    # это нижняя оболочка/дно, а не рельеф; сверху они выглядят чёрными ямами.
+    surf = local_surface(h_o, valid, win=5)
+    pits = valid & (h_o < surf - 10.0)
+    h_filled = np.where(pits, surf - 0.15, h_filled)
+    print("  провалов (крышек): %d клеток" % int(pits.sum()))
     fill_dist = np.zeros_like(h_o)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
@@ -306,7 +312,7 @@ def main() -> int:
     zs = oz0 + (np.arange(onz) + 0.5) * OUTER_CELL
     inside_inner = ((xs[None, :] > hx0) & (xs[None, :] < hx1)
                     & (zs[:, None] > hz0) & (zs[:, None] < hz1))
-    outer_cells = (holes_o & ~inside_inner)[:onz - 1, :onx - 1]
+    outer_cells = ((holes_o | pits) & ~inside_inner)[:onz - 1, :onx - 1]
     print("  дыр-клеток %d, из них в зоне арены %d"
           % (int(holes_o.sum()), int((holes_o & inside_inner).sum())))
 
