@@ -38,8 +38,9 @@ UV_V_PER_M, UV_V_OFFSET = 7.0e-5, 0.505151
 
 INNER_DILATE = 2        # клеток: заплатка заходит под соседние треугольники
 BLEND_METERS = 25.0     # плавный переход сетки в исходные высоты у края
-OUTER_CELL = 6.0        # м
-OUTER_RADIUS = 2000.0   # м от центра арены
+OUTER_CELL = 8.0        # м
+OUTER_RADIUS = 4000.0   # м от центра арены
+COVER_DEPTH = 6.0       # м ниже огибающей — это дыра/дно, закрываем крышкой
 SINK = 0.15             # м ниже меша, чтобы не мерцать на стыках
 MIN_LAND_Y = 60.0       # ниже — считаем водой, дыры там не нужны
 
@@ -300,40 +301,27 @@ def main() -> int:
     ox0 = ax - OUTER_RADIUS
     oz0 = az - OUTER_RADIUS
     onx = onz = int(round(2 * OUTER_RADIUS / OUTER_CELL))
-    cov_o_raw, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
-    cov_o = cov_o_raw
-    # то же снаружи: сравниваем с локальной медианой поверхности
-    cov_o = cov_o & (h_o > local_surface(h_o, cov_o) - 20.0)
-    valid = cov_o
-    print("  покрытие меша %d, после фильтра нижнего слоя %d" % (int(cov_o_raw.sum()), int(cov_o.sum())))
-    # высоты дыр — гармоническая заливка от краёв меша (медиана/сосед давали
-    # ступеньки в десятки метров), плюс ограничение уклона
-    # Дальние дыры заливаем ровной «подложкой» на высоте местности: любая
-    # интерполяция по краям даёт перепад в десятки метров (меш там
-    # многослойный), а пологая подложка на горизонте читается как земля.
-    base = float(np.median(h_o[valid])) - 1.0
-    h_filled = np.full_like(h_o, base)
-    # «крышки» над провалами: клетки, где поверхность на 10+ м ниже соседей, —
-    # это нижняя оболочка/дно, а не рельеф; сверху они выглядят чёрными ямами.
-    surf = local_surface(h_o, valid, win=5)
-    pits = valid & (h_o < surf - 10.0)
-    h_filled = np.where(pits, surf - 0.15, h_filled)
-    print("  провалов (крышек): %d клеток" % int(pits.sum()))
-    fill_dist = np.zeros_like(h_o)
-    fill_dist = np.where(cov_o, 0.0, fill_dist)
-    # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
-    land = h_filled > MIN_LAND_Y
-    # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
-    # больших дыр отбрасывалась и на кадрах оставались чёрные «стрелки»)
-    holes_o = (~valid) & land
-    # внутренний прямоугольник отдаём 1-м заплатке
+    valid, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
+    # Верхняя огибающая поверхности: максимум в окне 3×3. Всё, что лежит на
+    # 6 м ниже огибающей, — это дно каньонов, нижняя оболочка или дыра; сверху
+    # такие места выглядят чёрными многоугольниками (сквозь них видно небо
+    # ниже горизонта). Крышка на высоте огибающей закрывает их вровень.
+    env = h_o.copy()
+    for _ in range(2):
+        env = np.maximum.reduce([env] + neighbours(env))
+    surf = np.where(valid, h_o, -1e9)
+    good = valid & (h_o > env - COVER_DEPTH)
+    cap = (~good) & (env > MIN_LAND_Y)
+    cap_h = env - 0.2
+    print("  клеток: покрыто %d, крышек (дыры/каньоны) %d"
+          % (int(good.sum()), int(cap.sum())))
     xs = ox0 + (np.arange(onx) + 0.5) * OUTER_CELL
     zs = oz0 + (np.arange(onz) + 0.5) * OUTER_CELL
     inside_inner = ((xs[None, :] > hx0) & (xs[None, :] < hx1)
                     & (zs[:, None] > hz0) & (zs[:, None] < hz1))
-    outer_cells = ((holes_o | pits) & ~inside_inner)[:onz - 1, :onx - 1]
-    print("  дыр-клеток %d, из них в зоне арены %d"
-          % (int(holes_o.sum()), int((holes_o & inside_inner).sum())))
+    outer_cells = (cap & ~inside_inner)[:onz - 1, :onx - 1]
+    h_outer = np.where(good, h_o, cap_h)
+    h_outer = limit_slope(h_outer, good, OUTER_CELL, max_step=0.8)
 
     g = glbw.GLB("IslandFill")
     prims = []
@@ -341,7 +329,7 @@ def main() -> int:
                        "fill_inner", max_dist=None, max_step=1e6)
     if inner:
         prims.append(inner)
-    outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
+    outer = build_mesh(outer_cells, h_outer, OUTER_CELL, onx, onz, ox0, oz0,
                        "fill_outer", dist=None, max_dist=30.0, max_step=1e6)
     if outer:
         prims.append(outer)
