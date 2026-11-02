@@ -36,19 +36,21 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.32, 0.42, 0.58)
-	sky_mat.sky_horizon_color = Color(0.75, 0.72, 0.66)
+	sky_mat.sky_top_color = Color(0.26, 0.37, 0.55)
+	sky_mat.sky_horizon_color = Color(0.66, 0.66, 0.64)
 	sky_mat.ground_bottom_color = Color(0.20, 0.20, 0.19)
 	sky_mat.ground_horizon_color = Color(0.55, 0.52, 0.47)
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.55
+	env.ambient_light_energy = 0.32
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.66, 0.66, 0.62)
 	env.fog_density = 0.0009
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.85
+	# ACES не задирает средние тона: атлас острова сам по себе светлый (песок
+	# ~0.8), с FILMIC + ambient 0.55 земля уходила в сплошной белый
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.0
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
@@ -56,7 +58,7 @@ func _setup_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 1.15
+	sun.light_energy = 1.0
 	sun.light_color = Color(1.0, 0.94, 0.86)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 180.0
@@ -64,7 +66,7 @@ func _setup_environment() -> void:
 
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18, 60, 0)
-	fill.light_energy = 0.25
+	fill.light_energy = 0.12
 	fill.light_color = Color(0.6, 0.72, 0.9)
 	add_child(fill)
 
@@ -124,12 +126,13 @@ const UV_V_PER_M := 7.0e-5
 const UV_V_OFFSET := 0.505151
 
 
-## В меше острова есть дыры (у арены — дыры в десятки метров): сквозь них видно
-## пустоту/океан. Закрываем их заплаткой земли по heightmap.png с той же
-## UV-развёрткой, что у острова, поэтому швов и разницы в цвете не видно.
-const PATCH_RADIUS := 95.0        # м от центра арены
+## В меше острова есть дыры: у арены 13.8 % площади не покрыто ни одним
+## треугольником (сквозь них видно пустоту). Маска дыр посчитана офлайн —
+## tools/make_ground_mask.py → models/ground_mask.png. Заплатка строится только
+## по этим клеткам, по heightmap (шаг 1 м) и с той же UV-развёрткой, что у
+## острова, поэтому цвет и высота совпадают с родной землёй.
+const GROUND_MASK := "res://models/ground_mask.png"
 const PATCH_SINK := 0.12          # м ниже острова: где меш целый, его и видно
-const PATCH_MAX_STEP := 1.0       # м между вершинами
 
 
 func _build_arena_ground(island: Node) -> void:
@@ -138,57 +141,56 @@ func _build_arena_ground(island: Node) -> void:
 	if _hm.is_empty():
 		push_warning("нет heightmap.png — заплатка земли не построена")
 		return
-	var mat: Material = null
-	for mi in island.find_children("*", "MeshInstance3D", true, false):
-		var m := mi as MeshInstance3D
-		for surf in m.mesh.get_surface_count() if m.mesh else 0:
-			var candidate := m.get_active_material(surf)
-			if candidate is StandardMaterial3D and (candidate as StandardMaterial3D).albedo_texture != null:
-				mat = candidate
-				break
-		if mat != null:
-			break
-	var cx := arena_position.x
-	var cz := arena_position.z
-	var half := int(ceil(PATCH_RADIUS / PATCH_MAX_STEP))
-	var side := half * 2 + 1
-	var step: float = (2.0 * PATCH_RADIUS) / float(side - 1)
+	var mask_tex := load(GROUND_MASK) as Texture2D
+	if mask_tex == null:
+		push_warning("нет " + GROUND_MASK + " — дыры в земле останутся")
+		return
+	var mask := mask_tex.get_image()
+	mask.convert(Image.FORMAT_R8)
+	var mat := _terrain_material(island)
+	var res: int = _hm.res
+	var x0: float = _hm.x0
+	var z0: float = _hm.z0
+	var cell: float = _hm.cell
+	var mres := mask.get_width()
+	var mcell := float(res - 1) * cell / float(mres - 1) if mres > 1 else cell
 
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
-	verts.resize(side * side)
-	normals.resize(side * side)
-	uvs.resize(side * side)
-	for iz in side:
-		for ix in side:
-			var x := cx - PATCH_RADIUS + float(ix) * step
-			var z := cz - PATCH_RADIUS + float(iz) * step
-			var idx := iz * side + ix
+	verts.resize(res * res)
+	normals.resize(res * res)
+	uvs.resize(res * res)
+	for iz in res:
+		for ix in res:
+			var x := x0 + float(ix) * cell
+			var z := z0 + float(iz) * cell
+			var idx := iz * res + ix
 			verts[idx] = Vector3(x, height_at(x, z) - PATCH_SINK, z)
-			var hl := height_at(x - step, z)
-			var hr := height_at(x + step, z)
-			var hu := height_at(x, z - step)
-			var hd := height_at(x, z + step)
-			normals[idx] = Vector3(hl - hr, 2.0 * step, hu - hd).normalized()
+			normals[idx] = Vector3(
+				height_at(x - cell, z) - height_at(x + cell, z),
+				2.0 * cell,
+				height_at(x, z - cell) - height_at(x, z + cell)).normalized()
 			uvs[idx] = Vector2(x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
 
 	var indices := PackedInt32Array()
-	indices.resize((side - 1) * (side - 1) * 6)
-	var k := 0
-	for iz in side - 1:
-		for ix in side - 1:
-			var a := iz * side + ix
+	var quads := 0
+	for iz in res - 1:
+		for ix in res - 1:
+			var mx := int(float(ix) * cell / mcell)
+			var mz := int(float(iz) * cell / mcell)
+			if not _mask_set(mask, mx, mz):
+				continue
+			var a := iz * res + ix
 			var b := a + 1
-			var c := a + side
+			var c := a + res
 			var d := c + 1
-			indices[k] = a
-			indices[k + 1] = c
-			indices[k + 2] = b
-			indices[k + 3] = b
-			indices[k + 4] = c
-			indices[k + 5] = d
-			k += 6
+			for i in [a, c, b, b, c, d]:
+				indices.append(i)
+			quads += 1
+	if quads == 0:
+		push_warning("маска дыр пуста — заплатка не нужна")
+		return
 
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -201,9 +203,30 @@ func _build_arena_ground(island: Node) -> void:
 	var patch := MeshInstance3D.new()
 	patch.name = "ArenaGroundPatch"
 	patch.mesh = mesh
-	patch.material_override = mat
+	if mat != null:
+		patch.material_override = mat
 	add_child(patch)
-	print("заплатка земли: ", side, "x", side, " вершин, шаг ", "%.2f" % step, " м")
+	print("заплатка земли: ", quads, " клеток по 1 м (закрывает дыры меша)")
+
+
+## Маска хранится 8-битным PNG: белое — дыра.
+func _mask_set(mask: Image, x: int, z: int) -> bool:
+	if x < 0 or z < 0 or x >= mask.get_width() or z >= mask.get_height():
+		return false
+	return mask.get_pixel(x, z).r > 0.5
+
+
+## Материал земли острова — тот, у которого есть текстура-атлас.
+func _terrain_material(island: Node) -> Material:
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		for surf in m.mesh.get_surface_count():
+			var candidate := m.get_active_material(surf)
+			if candidate is StandardMaterial3D and (candidate as StandardMaterial3D).albedo_texture != null:
+				return candidate
+	return null
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).

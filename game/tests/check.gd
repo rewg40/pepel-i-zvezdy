@@ -159,8 +159,9 @@ func _run() -> void:
 	var patch_tris := 0
 	if patch != null and patch.mesh != null:
 		patch_tris = patch.mesh.get_faces().size() / 3
-	ok(patch != null and patch_tris > 10000,
+	ok(patch != null and patch_tris > 2000,
 		"заплатка земли над дырами: треугольников %d" % patch_tris)
+	ok(patch_tris < 40000, "заплатка только по дырам, а не под всей ареной")
 	if patch != null:
 		var pmat: Material = patch.material_override
 		ok(pmat is StandardMaterial3D and (pmat as StandardMaterial3D).albedo_texture != null,
