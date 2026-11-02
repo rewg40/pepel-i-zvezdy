@@ -62,15 +62,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null 2>&1
           mkdir -p /tmp/movie
-          timeout 900 xvfb-run -a godot --path game --resolution 960x540 \
+          timeout 900 xvfb-run -a godot --path game --resolution 640x360 \
             --rendering-driver opengl3 --fixed-fps 30 \
-            --write-movie /tmp/movie/f.png --quit-after 240 > /tmp/render.log 2>&1
+            --write-movie /tmp/movie/f.png --quit-after 60 > /tmp/render.log 2>&1
           echo "exit=$?" >> /tmp/render.log
           ls /tmp/movie | head -5 >> /tmp/render.log
           tail -20 /tmp/render.log
           mkdir -p ci
           i=0
-          for f in $(ls /tmp/movie/*.png 2>/dev/null | awk 'NR==2 || NR==90 || NR==150'); do
+          for f in $(ls /tmp/movie/*.png 2>/dev/null | awk 'NR==2 || NR==20 || NR==50'); do
             i=$((i+1))
             cp "$f" "ci/frame_$i.png"
           done
@@ -108,7 +108,7 @@ jobs:
           } > ci/report.md
           git config user.name "godot-check"
           git config user.email "godot-check@users.noreply.github.com"
-          git add ci/report.md
+          git add -A ci
           git commit -m "ci: отчёт проверки движком [skip ci]" || echo "нечего коммитить"
           git push || echo "push не удался"
 
