@@ -91,10 +91,10 @@ PASS  zombie.glb «WalkNoArms»: 22 дорожек, битых 0, длина 1.2
 === главная сцена
 остров: земля на атласе (1 поверхностей), растительность с вершинными цветами (59)
 заплатки земли: 1 мешей
-PASS  medic.glb: «MxWalk» двигает кисть на 9.3 см
-  бёдра в мировых координатах: (0.030207, 0.493636, 0.0069)
-PASS  zombie.glb: «MxWalk» двигает кисть на 9.2 см
-  бёдра в мировых координатах: (0.001563, 0.455554, 0.006364)
+PASS  medic.glb: «MxWalk» двигает кисть на 17.5 см
+  бёдра в мировых координатах: (0.022071, 0.483637, -0.006296)
+PASS  zombie.glb: «MxWalk» двигает кисть на 12.9 см
+  бёдра в мировых координатах: (-0.00594, 0.446332, -0.005806)
 PASS  игроков: 1
 PASS  зомби: 3
 PASS  остров на сцене: узлов-мешей 60
@@ -140,11 +140,11 @@ exit=0
 ![](ci/shots/05_debris.png)
 ![](ci/shots/06_terrain_only.png)
 ![](ci/shots/07_water_only.png)
+![](ci/shots/08_only_islet.png)
+![](ci/shots/08_only_ocean.png)
+![](ci/shots/08_only_seafloor.png)
+![](ci/shots/08_only_vegetation.png)
 ```
-ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
-ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
 ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
    at: init_output_device (drivers/alsa/audio_driver_alsa.cpp:90)
 WARNING: All audio drivers failed, falling back to the dummy driver.
@@ -161,6 +161,10 @@ shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
 игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.556, 1407.285, -77.76264)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
+shot 08_only_ocean (800, 450) -> /tmp/shots/08_only_ocean.png err=0
+shot 08_only_seafloor (800, 450) -> /tmp/shots/08_only_seafloor.png err=0
+shot 08_only_islet (800, 450) -> /tmp/shots/08_only_islet.png err=0
+shot 08_only_vegetation (800, 450) -> /tmp/shots/08_only_vegetation.png err=0
 материалы острова: { "Island": 1, "Ocean": 1, "Seafloor": 1, "Islet": 37, "Vegetation": 20 }
 shot 06_terrain_only (800, 450) -> /tmp/shots/06_terrain_only.png err=0
 shot 07_water_only (800, 450) -> /tmp/shots/07_water_only.png err=0
