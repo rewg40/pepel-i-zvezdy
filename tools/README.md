@@ -90,3 +90,14 @@ python tools/build_sword.py game/models/sword.glb
 ```bash
 /tmp/venv/bin/python tools/selftest_retarget.py
 ```
+
+Тест печёт наш клип в «чужой» риг (mixamo-имена, другие rest-ориентации, лишняя
+кость) и ретаргетит обратно: ошибка 0 и по кватернионам, и по бёдрам, и по
+матрицам из записанного файла. Живой пример сквозного прогона (Walk медика на
+скелет зомби, сверху — родной Walk зомби):
+
+```bash
+/tmp/venv/bin/python tools/retarget.py game/models/medic.glb \
+    game/models/zombie.glb /tmp/z_medic.glb
+# game/preview/retarget_check.png
+```
