@@ -133,6 +133,23 @@ def local_surface(h, valid, win=7):
     return np.where(np.isnan(med), h, med)
 
 
+def limit_slope(h, valid, cell, max_step=1.0, iters=200):
+    """Ограничиваем перепад между соседними клетками дыры.
+
+    Без этого в заплатке остаются ступеньки в десятки метров: получаются
+    вертикальные «иглы», каждая из которых затеняет соседнюю (на кадрах —
+    шахматка чёрных треугольников).
+    """
+    h = h.copy()
+    lim = max_step * cell
+    for _ in range(iters):
+        nb = [np.roll(h, 1, 0), np.roll(h, -1, 0), np.roll(h, 1, 1), np.roll(h, -1, 1)]
+        mn = np.minimum.reduce(nb)
+        mx = np.maximum.reduce(nb)
+        h = np.where(valid, h, np.clip(h, mn - lim, mx + lim))
+    return h
+
+
 def harmonic_fill(h, valid, iters=2000, tol=1e-3):
     """Гармоническая интерполяция высот в дырах (решение Лапласа, Якоби).
 
@@ -260,6 +277,7 @@ def main() -> int:
     # (перепад 47 м на одной клетке) — сглаживаем и ограничиваем уклон,
     # иначе на месте дыры встаёт вертикальная стена
     inner_h = harmonic_fill(np.where(cov, heights, 0.0), cov, iters=2000)
+    inner_h = limit_slope(inner_h, cov, hcell, max_step=0.8)
 
     print("внешняя сетка (%g м, радиус %g м)" % (OUTER_CELL, OUTER_RADIUS))
     ox0 = ax - OUTER_RADIUS
@@ -274,6 +292,7 @@ def main() -> int:
     h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
     h_filled = harmonic_fill(h_filled, cov_o, iters=2000)
+    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.8)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность

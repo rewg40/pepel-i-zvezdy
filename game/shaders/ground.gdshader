@@ -1,5 +1,7 @@
 shader_type spatial;
-render_mode cull_disabled, diffuse_burley;
+// shadows_disabled: у заплаток в дырах высоты восстановлены приблизительно, и
+// карта теней рисует на них чёрную «шахматку» самозатенения
+render_mode cull_disabled, diffuse_burley, shadows_disabled;
 
 // Земля острова: родной атлас island.glb (4096², ~5 м на тексель) даёт
 // настоящую раскладку биомов, а мелкая плитка detail возвращает зерно вблизи
