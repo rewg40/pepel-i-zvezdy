@@ -102,7 +102,7 @@ PASS  остров: земля на родном атласе 4096px
 PASS  остров: земля на шейдере ground.gdshader
 PASS  шейдер земли получает атлас
 PASS  шейдер земли получает зерно
-PASS  заплатки земли в дырах острова: треугольников 17896
+PASS  заплатки земли в дырах острова: треугольников 16300
 PASS  заплатки рисуются шейдером земли (атлас + зерно)
 PASS  карта высот загружена в float32 (высота в метрах)
 PASS  высота арены из карты (1405.00) совпадает с arena.json (1405.00)
@@ -140,12 +140,12 @@ exit=0
 ![](ci/shots/05_debris.png)
 ![](ci/shots/06_terrain_only.png)
 ![](ci/shots/07_water_only.png)
+![](ci/shots/08_only_fill.png)
 ![](ci/shots/08_only_islet.png)
 ![](ci/shots/08_only_ocean.png)
 ![](ci/shots/08_only_seafloor.png)
 ![](ci/shots/08_only_vegetation.png)
 ```
-ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
    at: init_output_device (drivers/alsa/audio_driver_alsa.cpp:90)
 WARNING: All audio drivers failed, falling back to the dummy driver.
      at: initialize (servers/audio_server.cpp:247)
@@ -165,6 +165,7 @@ shot 08_only_ocean (800, 450) -> /tmp/shots/08_only_ocean.png err=0
 shot 08_only_seafloor (800, 450) -> /tmp/shots/08_only_seafloor.png err=0
 shot 08_only_islet (800, 450) -> /tmp/shots/08_only_islet.png err=0
 shot 08_only_vegetation (800, 450) -> /tmp/shots/08_only_vegetation.png err=0
+shot 08_only_fill (800, 450) -> /tmp/shots/08_only_fill.png err=0
 материалы острова: { "Island": 1, "Ocean": 1, "Seafloor": 1, "Islet": 37, "Vegetation": 20 }
 shot 06_terrain_only (800, 450) -> /tmp/shots/06_terrain_only.png err=0
 shot 07_water_only (800, 450) -> /tmp/shots/07_water_only.png err=0
