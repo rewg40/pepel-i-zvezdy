@@ -3,7 +3,6 @@ name: godot-check
 on:
   push:
     branches: ['arena/**']
-    paths-ignore: ['ci/**']
   workflow_dispatch:
 
 permissions:
@@ -12,9 +11,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Godot 4.3
         run: |
@@ -24,13 +25,41 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/godot
           mv /tmp/godot/Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
           chmod +x /usr/local/bin/godot
-          godot --version
+          godot --version || true
 
-      - name: Report
+      - name: Import project
         run: |
+          timeout 900 godot --headless --path game --import 2>&1 | tee /tmp/import.log || true
+          tail -40 /tmp/import.log
+
+      - name: Run checks
+        id: tests
+        run: |
+          set +e
+          timeout 600 godot --headless --path game --script res://tests/check.gd > /tmp/check.log 2>&1
+          echo "exit=$?" >> /tmp/check.log
+          cat /tmp/check.log
+
+      - name: Build report
+        if: always()
+        run: |
+          mkdir -p ci
           {
-            echo "# Godot $(godot --version 2>&1)"
+            echo "# Проверка движком"
             echo
+            echo "Godot: \`$(godot --version 2>&1 | tail -1)\`"
+            echo
+            echo '## Импорт проекта'
+            echo '```'
+            grep -E "ERROR|WARNING|SCRIPT|error" /tmp/import.log | head -40 || echo "(ошибок нет)"
+            echo '```'
+            echo '## tests/check.gd'
+            echo '```'
+            cat /tmp/check.log
             echo '```'
           } > ci/report.md
-          exit 0
+          git config user.name "godot-check"
+          git config user.email "godot-check@users.noreply.github.com"
+          git add ci/report.md
+          git commit -m "ci: отчёт проверки движком [skip ci]" || echo "нечего коммитить"
+          git push || echo "push не удался"
