@@ -157,8 +157,8 @@ WARNING: All audio drivers failed, falling back to the dummy driver.
 shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
 shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
 shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
-зомби-ползун: body y=1405.20 model y=0.00 lowest bone=Hand_R y=1405.57 lowest mesh y=1404.53 on_floor=true
-игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.556, 1407.276, -77.69305)
+зомби-ползун: body y=1405.21 model y=0.00 lowest bone=Hand_R y=1405.58 lowest mesh y=1404.54 on_floor=true
+игрок y=1404.20 pos=(1309.365, 1404.197, -69.25084), камера=(1311.556, 1407.285, -77.76264)
 shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
 shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
 shot 08_only_ocean (800, 450) -> /tmp/shots/08_only_ocean.png err=0
