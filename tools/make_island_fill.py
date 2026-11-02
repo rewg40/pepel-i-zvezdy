@@ -287,11 +287,13 @@ def main() -> int:
     cov_o = cov_o & (h_o > local_surface(h_o, cov_o) - 20.0)
     valid = cov_o
     print("  покрытие меша %d, после фильтра нижнего слоя %d" % (int(cov_o_raw.sum()), int(cov_o.sum())))
+    # высоты дыр — гармоническая заливка от краёв меша (медиана/сосед давали
+    # ступеньки в десятки метров), плюс ограничение уклона
     init = np.where(valid, h_o, float(np.median(h_o[valid])))
-    h_filled = harmonic_fill(init, valid, iters=1500)
+    h_filled = harmonic_fill(init, valid, iters=3000)
+    h_filled = limit_slope(h_filled, valid, OUTER_CELL, max_step=0.6)
     fill_dist = np.zeros_like(h_o)
     fill_dist = np.where(cov_o, 0.0, fill_dist)
-    h_filled = limit_slope(h_filled, cov_o, OUTER_CELL, max_step=0.5)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     # все непокрытые клетки суши: крупные дыры целиком (раньше внутренность
@@ -312,7 +314,8 @@ def main() -> int:
                        "fill_inner", max_dist=None, max_step=1e6)
     if inner:
         prims.append(inner)
-    outer = None   # внешние заплатки не нужны: дыры у арены закрывает сетка 1 м
+    outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
+                       "fill_outer", dist=None, max_dist=30.0, max_step=1e6)
     if outer:
         prims.append(outer)
     if not prims:
