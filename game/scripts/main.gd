@@ -90,7 +90,7 @@ func _spawn_island() -> void:
 	island.name = "Island"
 	add_child(island)
 	_fix_island_materials(island)
-	_build_arena_ground()
+	_spawn_island_fill()
 	_make_heightmap_collision()
 
 
@@ -173,89 +173,32 @@ const UV_V_OFFSET := 0.505151
 
 
 ## В меше острова есть дыры: у арены 13.8 % площади не покрыто ни одним
-## треугольником (сквозь них видно пустоту). Маска дыр посчитана офлайн —
-## tools/make_ground_mask.py → models/ground_mask.png. Заплатка строится только
-## по этим клеткам, по heightmap (шаг 1 м) и с той же UV-развёрткой, что у
-## острова, поэтому цвет и высота совпадают с родной землёй.
-const GROUND_MASK := "res://models/ground_mask.png"
-const PATCH_SINK := 0.12          # м ниже острова: где меш целый, его и видно
+## треугольником, по острову — около 5 % суши (сквозь них видно пустоту, на
+## кадрах это чёрные «стрелки» посреди песка). Заплатки посчитаны офлайн
+## (tools/make_island_fill.py → models/island_fill.glb): 1 м в зоне heightmap,
+## где ходит игрок, и 4 м в радиусе 900 м. UV и высоты — от самого острова,
+## поэтому цвет и рельеф совпадают; рисуются тем же шейдером земли.
+const ISLAND_FILL := "res://models/island_fill.glb"
 
 
-func _build_arena_ground() -> void:
-	if _hm.is_empty():
-		_load_heightmap()
-	if _hm.is_empty():
-		push_warning("нет heightmap.f32/png — заплатка земли не построена")
+func _spawn_island_fill() -> void:
+	if not ResourceLoader.exists(ISLAND_FILL):
+		push_warning("нет " + ISLAND_FILL + " — дыры в земле останутся")
 		return
-	var mask_tex := load(GROUND_MASK) as Texture2D
-	if mask_tex == null:
-		push_warning("нет " + GROUND_MASK + " — дыры в земле останутся")
+	var packed := load(ISLAND_FILL) as PackedScene
+	if packed == null:
+		push_warning(ISLAND_FILL + " не загрузился")
 		return
-	var mask := mask_tex.get_image()
-	mask.convert(Image.FORMAT_R8)
-	var mat := _ground_mat
-	var res: int = _hm.res
-	var x0: float = _hm.x0
-	var z0: float = _hm.z0
-	var cell: float = _hm.cell
-	var mres := mask.get_width()
-	var mcell := (float(res - 1) * cell / float(mres - 1)) if mres > 1 else cell
-
-	var verts := PackedVector3Array()
-	var normals := PackedVector3Array()
-	verts.resize(res * res)
-	normals.resize(res * res)
-	for iz in res:
-		for ix in res:
-			var x := x0 + float(ix) * cell
-			var z := z0 + float(iz) * cell
-			var idx := iz * res + ix
-			verts[idx] = Vector3(x, height_at(x, z) - PATCH_SINK, z)
-			normals[idx] = Vector3(
-				height_at(x - cell, z) - height_at(x + cell, z),
-				2.0 * cell,
-				height_at(x, z - cell) - height_at(x, z + cell)).normalized()
-
-	var indices := PackedInt32Array()
-	var quads := 0
-	for iz in res - 1:
-		for ix in res - 1:
-			var mx := int(float(ix) * cell / mcell)
-			var mz := int(float(iz) * cell / mcell)
-			if not _mask_set(mask, mx, mz):
-				continue
-			var a := iz * res + ix
-			var b := a + 1
-			var c := a + res
-			var d := c + 1
-			for i in [a, c, b, b, c, d]:
-				indices.append(i)
-			quads += 1
-	if quads == 0:
-		push_warning("маска дыр пуста — заплатка не нужна")
-		return
-
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var patch := MeshInstance3D.new()
-	patch.name = "ArenaGroundPatch"
-	patch.mesh = mesh
-	if mat != null:
-		patch.material_override = mat
-	add_child(patch)
-	print("заплатка земли: ", quads, " клеток по 1 м (закрывает дыры меша)")
-
-
-## Маска хранится 8-битным PNG: белое — дыра.
-func _mask_set(mask: Image, x: int, z: int) -> bool:
-	if x < 0 or z < 0 or x >= mask.get_width() or z >= mask.get_height():
-		return false
-	return mask.get_pixel(x, z).r > 0.5
+	var fill := packed.instantiate()
+	fill.name = "IslandFill"
+	add_child(fill)
+	var n := 0
+	for mi in fill.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if _ground_mat != null:
+			m.material_override = _ground_mat
+		n += 1
+	print("заплатки земли: ", n, " мешей")
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).

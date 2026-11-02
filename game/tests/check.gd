@@ -165,24 +165,27 @@ func _run() -> void:
 		ok(sm.get_shader_parameter("atlas") != null, "шейдер земли получает атлас")
 		ok(sm.get_shader_parameter("detail") != null, "шейдер земли получает зерно")
 
-	# в меше острова у арены есть дыры — их закрывает заплатка по heightmap
-	var patch := scene.get_node_or_null("ArenaGroundPatch") as MeshInstance3D
-	var patch_tris := 0
-	if patch != null and patch.mesh != null:
-		patch_tris = patch.mesh.get_faces().size() / 3
-	ok(patch != null and patch_tris > 2000,
-		"заплатка земли над дырами: треугольников %d" % patch_tris)
-	ok(patch_tris < 40000, "заплатка только по дырам, а не под всей ареной")
-	if patch != null:
-		ok(patch.material_override is ShaderMaterial,
-			"заплатка земли рисуется тем же шейдером с атласом")
-		var hm: Dictionary = scene.get("_hm")
-		ok(not hm.is_empty() and float(hm.get("data", PackedFloat32Array())[0]) > 1000.0,
-			"карта высот загружена в float32 (высота в метрах)")
-		var arena: Vector3 = scene.get("arena_position")
-		ok(absf(scene.call("height_at", arena.x, arena.z) - arena.y) < 0.4,
-			"высота арены из карты (%.2f) совпадает с arena.json (%.2f)"
-				% [scene.call("height_at", arena.x, arena.z), arena.y])
+	# в меше острова есть дыры — их закрывают офлайн-заплатки island_fill.glb
+	var fill := scene.get_node_or_null("IslandFill")
+	var fill_tris := 0
+	var fill_ok_mat := true
+	if fill != null:
+		for m in fill.find_children("*", "MeshInstance3D", true, false):
+			var mi := m as MeshInstance3D
+			if mi.mesh != null:
+				fill_tris += mi.mesh.get_faces().size() / 3
+			if not (mi.material_override is ShaderMaterial):
+				fill_ok_mat = false
+	ok(fill != null and fill_tris > 5000,
+		"заплатки земли в дырах острова: треугольников %d" % fill_tris)
+	ok(fill_ok_mat, "заплатки рисуются шейдером земли (атлас + зерно)")
+	var hm: Dictionary = scene.get("_hm")
+	ok(not hm.is_empty() and float(hm.get("data", PackedFloat32Array())[0]) > 1000.0,
+		"карта высот загружена в float32 (высота в метрах)")
+	var arena: Vector3 = scene.get("arena_position")
+	ok(absf(scene.call("height_at", arena.x, arena.z) - arena.y) < 0.4,
+		"высота арены из карты (%.2f) совпадает с arena.json (%.2f)"
+			% [scene.call("height_at", arena.x, arena.z), arena.y])
 
 	if players.size() > 0:
 		var pl = players[0]
