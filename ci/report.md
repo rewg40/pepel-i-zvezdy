@@ -114,22 +114,37 @@ WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
      at: cleanup (core/object/object.cpp:2284)
 exit=0
 ```
-## Кадры из движка (software OpenGL)
+## Скриншоты из движка (llvmpipe / OpenGL 3)
 
-![](ci/frame_1.png)
-![](ci/frame_2.png)
-![](ci/frame_3.png)
+![](ci/shots/01_player.png)
+![](ci/shots/02_arena.png)
+![](ci/shots/03_zombie.png)
+![](ci/shots/04_crawl.png)
+![](ci/shots/05_debris.png)
 ```
-----------------
-Done recording movie at path: /tmp/movie/f.png
-60 frames at 30 FPS (movie length: 00:00:02), recorded in 00:03:54 (0% of real-time speed).
-CPU time: 202.89 seconds (average: 3381.53 ms/frame)
-GPU time: 202.79 seconds (average: 3379.83 ms/frame)
-----------------
+OpenGL API 4.5 (Core Profile) Mesa 26.0.8-1ubuntu0.3 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 21.1.8, 256 bits)
+libpulse.so.0: cannot open shared object file: No such file or directory
+libpulse.so.0: cannot open shared object file: No such file or directory
+ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
+ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN
+   at: init_output_device (drivers/alsa/audio_driver_alsa.cpp:90)
+WARNING: All audio drivers failed, falling back to the dummy driver.
+     at: initialize (servers/audio_server.cpp:247)
+
+внешние клипы: +7 из res://models/medic_clips.glb
+внешние клипы: +7 из res://models/zombie_clips.glb
+shot 01_player (800, 450) -> /tmp/shots/01_player.png err=0
+shot 02_arena (800, 450) -> /tmp/shots/02_arena.png err=0
+shot 03_zombie (800, 450) -> /tmp/shots/03_zombie.png err=0
+shot 04_crawl (800, 450) -> /tmp/shots/04_crawl.png err=0
+shot 05_debris (800, 450) -> /tmp/shots/05_debris.png err=0
+готово
 exit=0
-f.wav
-f00000000.png
-f00000001.png
-f00000002.png
-f00000003.png
 ```
