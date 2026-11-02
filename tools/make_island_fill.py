@@ -147,7 +147,6 @@ def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
     размеров) квад не выбрасываем, а прижимаем его вершины к нижнему углу:
     получается пологий лоскут, а не вертикальная стена.
     """
-    gy, gx = np.gradient(h, cell)
     limit = max_step * cell
 
     verts = np.zeros((nz * nx, 3), np.float32)
@@ -159,11 +158,10 @@ def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
             z = z0 + iz * cell
             verts[k] = (x, h[iz, ix] - SINK, z)
             uvs[k] = (x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
+    # нормали — вверх: в дырах высоты восстановлены грубо, и градиент из них
+    # даёт почти горизонтальные нормали, отчего заплатка рисуется чёрной
     normals = np.zeros_like(verts)
-    normals[:, 0] = (-gx).reshape(-1)
     normals[:, 1] = 1.0
-    normals[:, 2] = (-gy).reshape(-1)
-    normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-9)
 
     extra_v, extra_u = [], []
     tris = []

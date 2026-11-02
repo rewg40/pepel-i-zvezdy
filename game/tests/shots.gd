@@ -157,7 +157,14 @@ func _run() -> void:
 		var far := pp + Vector3(0, 30, 90)
 		await _place(far, pp + Vector3(0, 40, -600))
 		_only_materials(island, ["Island"])
+		if fill != null:
+			fill.visible = true
 		await _shot("06_terrain_only")
+		# тот же кадр без заплаток: видно, чьи это дыры — меша или заплатки
+		if fill != null:
+			fill.visible = false
+			await _shot("09_terrain_no_fill")
+			fill.visible = true
 		_only_materials(island, ["Ocean", "Seafloor", "Islet"])
 		await _shot("07_water_only")
 		_only_materials(island, [])
