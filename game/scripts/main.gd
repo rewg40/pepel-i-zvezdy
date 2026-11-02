@@ -90,15 +90,26 @@ func _spawn_island() -> void:
 	island.name = "Island"
 	add_child(island)
 	_fix_island_materials(island)
-	_build_arena_ground(island)
+	_build_arena_ground()
 	_make_heightmap_collision()
 
 
-## Материалы острова. Своей текстуры у земли нет — используем родной атлас
-## island.glb (4096², UV 0..1 на всю карту, ~5 м на тексель). Растительность и
-## островки раскрашены вершинными цветами — их надо включить, иначе они белые.
+## Материалы острова. Земля рисуется родным атласом island.glb (4096²,
+## ~5 м на тексель) через свой шейдер: атлас даёт настоящую раскладку биомов,
+## а мелкое зерно detail возвращает фактуру вблизи (shaders/ground.gdshader).
+## Растительность и островки раскрашены вершинными цветами — их надо включить,
+## иначе они белые плоские треугольники.
+const GROUND_SHADER := "res://shaders/ground.gdshader"
+const GROUND_DETAIL := "res://models/ground_detail.png"
+
+var _ground_mat: Material = null
+
+
 func _fix_island_materials(island: Node) -> void:
-	var n := 0
+	var atlas := _terrain_atlas(island)
+	_ground_mat = _make_ground_material(atlas)
+	var ground := 0
+	var vcol := 0
 	for mi in island.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := mi as MeshInstance3D
 		if mesh_instance.mesh == null:
@@ -107,15 +118,50 @@ func _fix_island_materials(island: Node) -> void:
 			var mat := mesh_instance.get_active_material(surf)
 			if not (mat is StandardMaterial3D):
 				continue
-			var dup: StandardMaterial3D = mat.duplicate()
+			var std_mat := mat as StandardMaterial3D
+			if std_mat.albedo_texture != null and _ground_mat != null:
+				mesh_instance.set_surface_override_material(surf, _ground_mat)
+				ground += 1
+				continue
+			var dup: StandardMaterial3D = std_mat.duplicate()
 			dup.roughness = 1.0
 			dup.metallic = 0.0
 			dup.metallic_specular = 0.12
 			dup.vertex_color_use_as_albedo = true
 			dup.vertex_color_is_srgb = true
 			mesh_instance.set_surface_override_material(surf, dup)
-			n += 1
-	print("остров: материалы (", n, " поверхностей), вершинные цвета включены")
+			vcol += 1
+	print("остров: земля на атласе (", ground, " поверхностей), ",
+		"растительность с вершинными цветами (", vcol, ")")
+
+
+## Шейдер земли: родной атлас + мелкое зерно; UV считаются из мировой позиции.
+func _make_ground_material(atlas: Texture2D) -> Material:
+	if atlas == null or not ResourceLoader.exists(GROUND_SHADER):
+		push_warning("нет " + GROUND_SHADER + " — земля на стандартном материале")
+		return null
+	var shader := load(GROUND_SHADER) as Shader
+	if shader == null:
+		return null
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("atlas", atlas)
+	if ResourceLoader.exists(GROUND_DETAIL):
+		mat.set_shader_parameter("detail", load(GROUND_DETAIL))
+	return mat
+
+
+## Атлас острова — текстура того материала, у которого она вообще есть.
+func _terrain_atlas(island: Node) -> Texture2D:
+	for mi in island.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		for surf in m.mesh.get_surface_count():
+			var candidate := m.get_active_material(surf)
+			if candidate is StandardMaterial3D and (candidate as StandardMaterial3D).albedo_texture != null:
+				return (candidate as StandardMaterial3D).albedo_texture
+	return null
 
 
 ## UV земли аффинно связан с миром: u = x * UV_U_PER_M + UV_U_OFFSET,
@@ -135,11 +181,11 @@ const GROUND_MASK := "res://models/ground_mask.png"
 const PATCH_SINK := 0.12          # м ниже острова: где меш целый, его и видно
 
 
-func _build_arena_ground(island: Node) -> void:
+func _build_arena_ground() -> void:
 	if _hm.is_empty():
 		_load_heightmap()
 	if _hm.is_empty():
-		push_warning("нет heightmap.png — заплатка земли не построена")
+		push_warning("нет heightmap.f32/png — заплатка земли не построена")
 		return
 	var mask_tex := load(GROUND_MASK) as Texture2D
 	if mask_tex == null:
@@ -147,20 +193,18 @@ func _build_arena_ground(island: Node) -> void:
 		return
 	var mask := mask_tex.get_image()
 	mask.convert(Image.FORMAT_R8)
-	var mat := _terrain_material(island)
+	var mat := _ground_mat
 	var res: int = _hm.res
 	var x0: float = _hm.x0
 	var z0: float = _hm.z0
 	var cell: float = _hm.cell
 	var mres := mask.get_width()
-	var mcell := float(res - 1) * cell / float(mres - 1) if mres > 1 else cell
+	var mcell := (float(res - 1) * cell / float(mres - 1)) if mres > 1 else cell
 
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
-	var uvs := PackedVector2Array()
 	verts.resize(res * res)
 	normals.resize(res * res)
-	uvs.resize(res * res)
 	for iz in res:
 		for ix in res:
 			var x := x0 + float(ix) * cell
@@ -171,7 +215,6 @@ func _build_arena_ground(island: Node) -> void:
 				height_at(x - cell, z) - height_at(x + cell, z),
 				2.0 * cell,
 				height_at(x, z - cell) - height_at(x, z + cell)).normalized()
-			uvs[idx] = Vector2(x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
 
 	var indices := PackedInt32Array()
 	var quads := 0
@@ -196,7 +239,6 @@ func _build_arena_ground(island: Node) -> void:
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -214,19 +256,6 @@ func _mask_set(mask: Image, x: int, z: int) -> bool:
 	if x < 0 or z < 0 or x >= mask.get_width() or z >= mask.get_height():
 		return false
 	return mask.get_pixel(x, z).r > 0.5
-
-
-## Материал земли острова — тот, у которого есть текстура-атлас.
-func _terrain_material(island: Node) -> Material:
-	for mi in island.find_children("*", "MeshInstance3D", true, false):
-		var m := mi as MeshInstance3D
-		if m.mesh == null:
-			continue
-		for surf in m.mesh.get_surface_count():
-			var candidate := m.get_active_material(surf)
-			if candidate is StandardMaterial3D and (candidate as StandardMaterial3D).albedo_texture != null:
-				return candidate
-	return null
 
 
 ## Коллизия земли: HeightMapShape3D из heightmap.png (1 м на клетку).

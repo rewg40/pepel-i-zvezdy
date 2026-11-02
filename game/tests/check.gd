@@ -144,15 +144,26 @@ func _run() -> void:
 
 	# земля должна рисоваться родным атласом острова, а не синтетической плиткой
 	var terrain_tex: Texture2D = null
+	var ground_mat: Material = null
 	if island != null:
 		for m in island.find_children("*", "MeshInstance3D", true, false):
-			var mat: Material = (m as MeshInstance3D).get_active_material(0)
-			if mat is StandardMaterial3D and (mat as StandardMaterial3D).albedo_texture != null:
-				terrain_tex = (mat as StandardMaterial3D).albedo_texture
+			var mi := m as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			var own: Material = mi.mesh.surface_get_material(0)
+			if own is StandardMaterial3D and (own as StandardMaterial3D).albedo_texture != null:
+				terrain_tex = (own as StandardMaterial3D).albedo_texture
+				ground_mat = mi.get_active_material(0)
 				break
 	ok(terrain_tex != null and terrain_tex.get_width() >= 2048,
 		"остров: земля на родном атласе %s" % [
 			"-" if terrain_tex == null else "%dpx" % terrain_tex.get_width()])
+	ok(ground_mat is ShaderMaterial,
+		"остров: земля на шейдере ground.gdshader")
+	if ground_mat is ShaderMaterial:
+		var sm := ground_mat as ShaderMaterial
+		ok(sm.get_shader_parameter("atlas") != null, "шейдер земли получает атлас")
+		ok(sm.get_shader_parameter("detail") != null, "шейдер земли получает зерно")
 
 	# в меше острова у арены есть дыры — их закрывает заплатка по heightmap
 	var patch := scene.get_node_or_null("ArenaGroundPatch") as MeshInstance3D
@@ -163,9 +174,8 @@ func _run() -> void:
 		"заплатка земли над дырами: треугольников %d" % patch_tris)
 	ok(patch_tris < 40000, "заплатка только по дырам, а не под всей ареной")
 	if patch != null:
-		var pmat: Material = patch.material_override
-		ok(pmat is StandardMaterial3D and (pmat as StandardMaterial3D).albedo_texture != null,
-			"заплатка земли использует атлас острова")
+		ok(patch.material_override is ShaderMaterial,
+			"заплатка земли рисуется тем же шейдером с атласом")
 		var hm: Dictionary = scene.get("_hm")
 		ok(not hm.is_empty() and float(hm.get("data", PackedFloat32Array())[0]) > 1000.0,
 			"карта высот загружена в float32 (высота в метрах)")
