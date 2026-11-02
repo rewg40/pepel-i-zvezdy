@@ -47,6 +47,7 @@ COARSE_CELL = 24.0      # м, дальний план
 # берём отметку ниже самого нижнего края суши вокруг арены.
 SEA_LEVEL = 1330.0      # м, всё ниже — вода
 MIN_LAND = 2.0          # м над водой: ниже не строим, чтобы не лезть под воду
+BLEND_METERS = 30.0     # плавный переход ближней сетки в дальнюю
 
 
 def harmonic_fill(h, valid, iters=2000, tol=1e-3):
@@ -129,7 +130,7 @@ def main() -> int:
     h = np.where(valid, hmax, np.nan)
     init = np.where(valid, hmax, float(np.median(hmax[valid])))
     h = harmonic_fill(init, valid, iters=1500)
-    h = limit_slope(h, valid, COARSE_CELL, max_step=1.2)
+    h = limit_slope(h, valid, COARSE_CELL, max_step=0.35)
     # крышки над провалами: всё, что заметно ниже локальной поверхности
     surf = local_surface(h, valid, win=5)
     pits = valid & (h < surf - 8.0)
@@ -144,8 +145,22 @@ def main() -> int:
                                                    int(coarse_cells.sum())))
 
     # --- ближний план: сетка 1 м по карте высот
+    # На краю площадки высоты плавно (BLEND_METERS) переходят в дальний план:
+    # иначе между сеткой 1 м и сеткой 24 м встаёт стена в десятки метров.
     fine_cells = np.ones((res - 1, res - 1), bool)
     print("ближний план: площадка %.0f×%.0f м" % (hx1 - hx0, hz1 - hz0))
+
+    def coarse_at(x, z):
+        ix = np.clip(np.round((x - x0) / COARSE_CELL).astype(int), 0, nx - 1)
+        iz = np.clip(np.round((z - z0) / COARSE_CELL).astype(int), 0, nz - 1)
+        return h[iz, ix]
+
+    fx = hx0 + np.arange(res)[None, :] * hcell
+    fz = hz0 + np.arange(res)[:, None] * hcell
+    d_edge = np.minimum(np.minimum(fx - hx0, hx1 - fx), np.minimum(fz - hz0, hz1 - fz))
+    w = np.clip(1.0 - d_edge / BLEND_METERS, 0.0, 1.0) ** 2
+    fine = fine * (1.0 - w) + coarse_at(np.broadcast_to(fx, fine.shape),
+                                        np.broadcast_to(fz, fine.shape)) * w
 
     g = glbw.GLB("IslandTerrain")
     prims = []
