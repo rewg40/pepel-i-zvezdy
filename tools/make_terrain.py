@@ -140,9 +140,13 @@ def main() -> int:
                   ((x0 + np.arange(nx) * COARSE_CELL)[None, :] <= hx1) & \
                   ((z0 + np.arange(nz) * COARSE_CELL)[:, None] >= hz0) & \
                   ((z0 + np.arange(nz) * COARSE_CELL)[:, None] <= hz1)
-    coarse_cells = (h > SEA_LEVEL + MIN_LAND) & ~inside_fine
-    print("  суша: %d клеток, из них рисуем %d" % (int((h > SEA_LEVEL).sum()),
-                                                   int(coarse_cells.sum())))
+    # Рисуем всю покрытую мешем сушу, а высоты не опускаем ниже уровня воды:
+    # тогда край острова уходит под воду плавно, а не обрывается стенкой,
+    # сквозь которую видно пустоту.
+    h = np.maximum(h, SEA_LEVEL)
+    coarse_cells = valid & ~inside_fine
+    print("  суша: %d клеток, рисуем %d" % (int((h > SEA_LEVEL).sum()),
+                                            int(coarse_cells.sum())))
 
     # --- ближний план: сетка 1 м по карте высот
     # На краю площадки высоты плавно (BLEND_METERS) переходят в дальний план:
