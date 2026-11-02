@@ -88,27 +88,43 @@ def dilate(mask, n):
 
 
 def fill_nearest(h, valid):
-    """Заливка высот от соседних валидных клеток (без scipy)."""
+    """Заливка высот от соседних валидных клеток (без scipy).
+
+    Возвращает (высоты, расстояние до ближайшей валидной клетки в клетках):
+    по расстоянию отбрасываем клетки, где высота «приехала» издалека — из
+    таких получаются вертикальные простыни вместо земли.
+    """
     h = h.copy()
     known = valid.copy()
-    for _ in range(64):
+    dist = np.where(valid, 0.0, np.inf)
+    for _ in range(128):
         if known.all():
             break
         acc = np.zeros_like(h)
         cnt = np.zeros_like(h)
+        nd = np.full_like(h, np.inf)
         for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            shifted_h = np.roll(np.roll(h, dy, 0), dx, 1)
-            shifted_k = np.roll(np.roll(known, dy, 0), dx, 1)
-            acc += np.where(shifted_k, shifted_h, 0.0)
-            cnt += shifted_k
+            sh = np.roll(np.roll(h, dy, 0), dx, 1)
+            sk = np.roll(np.roll(known, dy, 0), dx, 1)
+            sd = np.roll(np.roll(dist, dy, 0), dx, 1)
+            acc += np.where(sk, sh, 0.0)
+            cnt += sk
+            nd = np.minimum(nd, np.where(sk, sd, np.inf))
         grow = (~known) & (cnt > 0)
         h[grow] = acc[grow] / cnt[grow]
+        dist[grow] = nd[grow] + 1.0
         known |= grow
-    return h
+    return h, dist
 
 
-def build_mesh(cells, h, x0, z0, cell, nx, nz, name):
-    """Квады по клеткам-дырам на общей сетке."""
+def build_mesh(cells, h, cell, nx, nz, x0, z0, name, dist=None,
+               max_dist=6.0, max_step=3.0):
+    """Квады по клеткам-дырам.
+
+    Клетка пропускается, если её высота восстановлена слишком далеко от меша
+    (dist > max_dist клеток) или перепад на клетке больше max_step её размеров:
+    из таких получаются вертикальные простыни и иглы.
+    """
     verts = np.zeros((nz * nx, 3), np.float32)
     uvs = np.zeros((nz * nx, 2), np.float32)
     for iz in range(nz):
@@ -118,22 +134,33 @@ def build_mesh(cells, h, x0, z0, cell, nx, nz, name):
             k = iz * nx + ix
             verts[k] = (x, h[iz, ix] - SINK, z)
             uvs[k] = (x * UV_U_PER_M + UV_U_OFFSET, z * UV_V_PER_M + UV_V_OFFSET)
-    # нормали по градиенту высот
-    normals = np.zeros_like(verts)
     gy, gx = np.gradient(h, cell)
+    normals = np.zeros_like(verts)
     normals[:, 0] = (-gx).reshape(-1)
     normals[:, 1] = 1.0
     normals[:, 2] = (-gy).reshape(-1)
     normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-9)
 
+    limit = max_step * cell
     quads = []
+    skipped = 0
     for iz in range(nz - 1):
         for ix in range(nx - 1):
             if not cells[iz, ix]:
                 continue
+            corners = [h[iz, ix], h[iz, ix + 1], h[iz + 1, ix], h[iz + 1, ix + 1]]
+            if max(corners) - min(corners) > limit:
+                skipped += 1
+                continue
+            if dist is not None:
+                d = [dist[iz, ix], dist[iz, ix + 1], dist[iz + 1, ix], dist[iz + 1, ix + 1]]
+                if max(d) > max_dist:
+                    skipped += 1
+                    continue
             a = iz * nx + ix
             quads.append((a, a + nx, a + 1, a + 1, a + nx, a + nx + 1))
     if not quads:
+        print("  %-14s пусто" % name)
         return None
     F = np.array(quads, np.uint32).reshape(-1, 3)
     used = np.unique(F)
@@ -141,8 +168,8 @@ def build_mesh(cells, h, x0, z0, cell, nx, nz, name):
     remap[used] = np.arange(len(used))
     V, N, U = verts[used], normals[used], uvs[used]
     F = remap[F]
-    print("  %-14s клеток %6d, вершин %7d, треугольников %7d"
-          % (name, len(quads), len(V), len(F)))
+    print("  %-14s клеток %6d (пропущено крутых %4d), треугольников %6d"
+          % (name, len(quads), skipped, len(F)))
     return {'attributes': {'POSITION': V, 'NORMAL': N, 'TEXCOORD_0': U},
             'indices': F.reshape(-1)}
 
@@ -176,7 +203,7 @@ def main() -> int:
     onx = onz = int(round(2 * OUTER_RADIUS / OUTER_CELL))
     cov_o, h_o = raster(P, I, ox0, oz0, OUTER_CELL, onx, onz)
     valid = cov_o
-    h_filled = fill_nearest(np.where(valid, h_o, 0.0), valid)
+    h_filled, fill_dist = fill_nearest(np.where(valid, h_o, 0.0), valid)
     # дыры только там, где рядом суша (иначе это океан и он закрыт водой)
     land = h_filled > MIN_LAND_Y
     holes_o = (~valid) & land & dilate(valid, 2)
@@ -191,10 +218,12 @@ def main() -> int:
 
     g = glbw.GLB("IslandFill")
     prims = []
-    inner = build_mesh(inner_cells, heights, hx0, hz0, hcell, res, res, "fill_inner")
+    inner = build_mesh(inner_cells, heights, hcell, res, res, hx0, hz0,
+                       "fill_inner", max_dist=None, max_step=4.0)
     if inner:
         prims.append(inner)
-    outer = build_mesh(outer_cells, h_filled, ox0, oz0, OUTER_CELL, onx, onz, "fill_outer")
+    outer = build_mesh(outer_cells, h_filled, OUTER_CELL, onx, onz, ox0, oz0,
+                       "fill_outer", dist=fill_dist, max_dist=6.0, max_step=3.0)
     if outer:
         prims.append(outer)
     if not prims:

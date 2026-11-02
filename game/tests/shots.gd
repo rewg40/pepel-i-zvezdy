@@ -133,10 +133,18 @@ func _run() -> void:
 	if island != null:
 		# по одному материалу с того же ракурса, что 02
 		await _place(pp + Vector3(7.0, 6.5, 8.5), pp + Vector3(0, 0.8, -6.0))
+		var fill := scene.get_node_or_null("IslandFill") as Node3D
+		if fill != null:
+			fill.visible = false
 		for mname in ["Ocean", "Seafloor", "Islet", "Vegetation"]:
 			_only_materials(island, [mname])
 			await _shot("08_only_" + mname.to_lower())
 		_only_materials(island, [])
+		if fill != null:
+			_only_materials(island, ["-"])
+			fill.visible = true
+			await _shot("08_only_fill")
+			_only_materials(island, [])
 		var by_mat := {}
 		for mi in island.find_children("*", "MeshInstance3D", true, false):
 			var m := mi as MeshInstance3D
