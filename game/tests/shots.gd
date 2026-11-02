@@ -35,6 +35,31 @@ func _shot(name: String) -> void:
 	print("shot ", name, " ", img.get_size(), " -> ", path, " err=", err)
 
 
+## Диагностика: где находится модель относительно земли.
+func _debug_ground(node: Node, label: String) -> void:
+	var skel: Skeleton3D = node.get("skeleton")
+	var model: Node3D = node.get("model")
+	var lowest := INF
+	var lowest_name := ""
+	if skel != null:
+		for i in skel.get_bone_count():
+			var y: float = (skel.global_transform * skel.get_bone_global_pose(i)).origin.y
+			if y < lowest:
+				lowest = y
+				lowest_name = skel.get_bone_name(i)
+	var aabb_y := INF
+	var on_floor: bool = bool(node.call("is_on_floor")) if node.has_method("is_on_floor") else false
+	if model != null:
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			if not m.visible:
+				continue
+			aabb_y = minf(aabb_y, (m.global_transform * m.get_aabb()).position.y)
+	print("%s: body y=%.2f model y=%.2f lowest bone=%s y=%.2f lowest mesh y=%.2f on_floor=%s" % [
+		label, (node as Node3D).global_position.y, model.position.y if model else 0.0,
+		lowest_name, lowest, aabb_y, on_floor])
+
+
 func _place(pos: Vector3, look_at_point: Vector3) -> void:
 	cam.look_at_from_position(pos, look_at_point, Vector3.UP)
 	# у самой камеры свой Environment не нужен, но мелкий клип убирает джиттер
@@ -83,6 +108,8 @@ func _run() -> void:
 	# зомби ползёт и успевает уйти из кадра — фиксируем его на месте
 	z.set_physics_process(false)
 	zp = z.global_position
+	_debug_ground(z, "зомби-ползун")
+	print("игрок y=%.2f pos=%s, камера=%s" % [pl.global_position.y, pl.global_position, cam.global_position])
 	await _place(zp + Vector3(2.4, 1.3, 2.8), zp + Vector3(0, 0.4, 0))
 	await _shot("04_crawl")
 
