@@ -38,9 +38,8 @@ func _setup_environment() -> void:
 	var sky_mat := ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.26, 0.37, 0.55)
 	sky_mat.sky_horizon_color = Color(0.60, 0.63, 0.68)
-	# нижняя полусфера неба — песочная: сквозь редкие дыры в меше острова
-	# (децимация) видно именно её, и с тёмно-серым цветом они читались как
-	# чёрные многоугольники посреди песка
+	# нижняя полусфера неба — песочная: на горизонте она видна между склонами
+	# острова, тёмно-серый цвет там читался как чёрный провал
 	sky_mat.ground_bottom_color = Color(0.55, 0.47, 0.34)
 	sky_mat.ground_horizon_color = Color(0.72, 0.66, 0.55)
 	sky.sky_material = sky_mat
@@ -48,12 +47,13 @@ func _setup_environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.40
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.62, 0.66, 0.72)
-	env.fog_density = 0.0007
+	# дымка тёплая, песочная: холодная серая выбеливала дальний план
+	env.fog_light_color = Color(0.70, 0.66, 0.56)
+	env.fog_density = 0.0009
 	# ACES не задирает средние тона: атлас острова сам по себе светлый (песок
 	# ~0.8), с FILMIC + ambient 0.55 земля уходила в сплошной белый
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 0.85
+	env.tonemap_exposure = 0.72
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
@@ -61,7 +61,7 @@ func _setup_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 0.95
+	sun.light_energy = 0.90
 	sun.light_color = Color(1.0, 0.97, 0.92)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 180.0
